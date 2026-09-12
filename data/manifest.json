@@ -1,0 +1,35 @@
+{
+  "dataset_version": "2.0.0",
+  "generator_seed": 20260912,
+  "reference_time": "2026-09-01T09:00:00+02:00",
+  "format": {
+    "encoding": "UTF-8",
+    "delimiter": ";",
+    "line_endings": "LF"
+  },
+  "entities": {
+    "companies": 10000,
+    "contacts": 20000,
+    "opportunities": 15000,
+    "activity_log_entries": 40000,
+    "fair_editions": 16
+  },
+  "files": {
+    "companies_and_contacts.csv": {
+      "data_rows": 20000,
+      "sha256": "21b26d37be606e4641db9685c23e25ab51b6dc0eefa92c16b3bef28f2f5a8cea"
+    },
+    "opportunities.csv": {
+      "data_rows": 15000,
+      "sha256": "7915e9b1a0d7f37521c0185928e9414d90da3ed6f6fba01652f3344362a712ec"
+    },
+    "activity_log.csv": {
+      "data_rows": 40000,
+      "sha256": "1eb4de7a2c5b92faedd22b8ae314d605bcd41feb458b29ed2d55daab637c8d3a"
+    },
+    "fair_editions.csv": {
+      "data_rows": 16,
+      "sha256": "d7fb6d3fe508b7cb4f0673ff5b2e8e18da1f18e0f49d2662058aae105ba3a660"
+    }
+  }
+}

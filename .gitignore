@@ -1,0 +1,19 @@
+.DS_Store
+.env
+.env.*
+!.env.example
+
+# Build output (adjust for your stack).
+node_modules/
+.next/
+dist/
+build/
+coverage/
+__pycache__/
+.pytest_cache/
+.venv/
+target/
+
+# Keep the source data in Git.
+!data/
+!data/**
