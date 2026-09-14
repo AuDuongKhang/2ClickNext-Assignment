@@ -22,6 +22,9 @@ __pycache__/
 .venv/
 target/
 
+# Docker build and test artifacts.
+requirements.lock.tmp
+
 # Keep the source data in Git.
 !data/
 !data/**

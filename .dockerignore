@@ -1,0 +1,13 @@
+.git
+.superpowers
+docs/superpowers
+__pycache__
+*.py[cod]
+.pytest_cache
+.venv
+.env
+.env.*
+staticfiles
+media
+*.sqlite3
+*.log

@@ -14,5 +14,20 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
 
+  web:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_NAME: crm
+      DB_USER: crm
+      DB_PASSWORD: local-development-only
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/data:ro
+
 volumes:
   postgres-data:
