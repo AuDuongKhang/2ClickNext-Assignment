@@ -3,3 +3,5 @@ AC-001;CO-001;OP-001;call;25/08/2026 10:30;Confirmed requested height and plot;0
 AC-002;CO-002;;note;20/08/2026 16:45;Company-level note about shared artwork contact;;;j.chen
 AC-003;CO-001;OP-001;task;26/08/2026 09:00;Send updated height proposal;06/09/2026;N;j.chen
 AC-004;CO-001;OP-003;task;27/08/2026 11:00;Archive completed summer handoff;07/09/2026;Y;a.morgan
+AC-005;CO-002;;task;28/08/2026 10:00;Company-level task without due date;;N;j.chen
+AC-006;CO-002;;email;29/08/2026 10:00;Company-level conversation follow-up;12/09/2026;Y;j.chen

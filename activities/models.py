@@ -42,8 +42,15 @@ class Activity(models.Model):
 
 
 class FollowUp(models.Model):
-    opportunity = models.ForeignKey(Opportunity, on_delete=models.PROTECT, related_name="follow_ups")
-    due_on = models.DateField()
+    company = models.ForeignKey(Company, on_delete=models.PROTECT, related_name="follow_ups")
+    opportunity = models.ForeignKey(
+        Opportunity,
+        on_delete=models.PROTECT,
+        related_name="follow_ups",
+        null=True,
+        blank=True,
+    )
+    due_on = models.DateField(null=True, blank=True)
     summary = models.TextField()
     created_at = models.DateTimeField()
     author = models.CharField(max_length=255)

@@ -1,11 +1,11 @@
 {
   "dataset_version": "fixture-1.0.0",
   "format": {"encoding": "UTF-8", "delimiter": ";", "line_endings": "LF"},
-  "entities": {"companies": 2, "contacts": 3, "opportunities": 3, "activity_log_entries": 4, "fair_editions": 2},
+  "entities": {"companies": 2, "contacts": 3, "opportunities": 3, "activity_log_entries": 6, "fair_editions": 2},
   "files": {
     "companies_and_contacts.csv": {"data_rows": 3, "sha256": "910f6da90e912a1585298affccfc1483e11093afcca9fabb9b6bc22eefc80dbb"},
     "opportunities.csv": {"data_rows": 3, "sha256": "509cdf5154a64d95229129b3286cb93c31bee5a56f737e07c78fa3c5b26e0c83"},
-    "activity_log.csv": {"data_rows": 4, "sha256": "2828f4d78687db89de980ae7d0958bd1cd500d0c8d8e82c559d671c05df02949"},
+    "activity_log.csv": {"data_rows": 6, "sha256": "797f3106f84bafd774bef6a9c7167754feb930908f23eadb2201facb6cf2d17b"},
     "fair_editions.csv": {"data_rows": 2, "sha256": "4d2923f51c40e163e732fbae4bace7a997f080ca21c48f01e124081a3c92d6e2"}
   }
 }

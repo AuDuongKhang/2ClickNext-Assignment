@@ -6,7 +6,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Callable
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 
 from activities.models import Activity, ActivityType, FollowUp, FollowUpStatus
 from crm.models import Company, Contact
@@ -191,7 +191,44 @@ def _load_archive(archive_dir: Path) -> ArchiveData:
     return ArchiveData(manifest, _canonical_manifest_checksum(manifest), rows)
 
 
-def _validate_archive(data: ArchiveData) -> None:
+def _reconciled_company_details(
+    rows: list[tuple[int, dict[str, str]]],
+) -> dict[str, dict[str, str]]:
+    companies: dict[str, dict[str, str]] = {}
+    legacy_row_ids: set[str] = set()
+    for row_number, row in rows:
+        legacy_row_id = _required(row, "legacy_row_id", "companies_and_contacts.csv", row_number)
+        if legacy_row_id in legacy_row_ids:
+            raise ArchiveValidationError(
+                "companies_and_contacts.csv", row_number, f"duplicate legacy row {legacy_row_id}"
+            )
+        legacy_row_ids.add(legacy_row_id)
+        code = _required(row, "company_code", "companies_and_contacts.csv", row_number)
+        details = {
+            "name": _clean(row["company_name"]),
+            "province_code": _clean(row["province_code"]),
+            "region": _clean(row["region"]),
+            "sales_rep": _clean(row["sales_rep"]),
+        }
+        if not details["name"]:
+            raise ArchiveValidationError("companies_and_contacts.csv", row_number, "company_name is required")
+        existing = companies.get(code)
+        if existing is None:
+            companies[code] = details
+            continue
+        for field, value in details.items():
+            if value and existing[field] and _normalized(value) != _normalized(existing[field]):
+                raise ArchiveValidationError(
+                    "companies_and_contacts.csv",
+                    row_number,
+                    f"company {code} has conflicting {field}",
+                )
+            if not existing[field] and value:
+                existing[field] = value
+    return companies
+
+
+def _validate_archive(data: ArchiveData) -> dict[str, dict[str, str]]:
     fair_codes: set[str] = set()
     for row_number, row in data.rows["fair_editions.csv"]:
         code = _required(row, "fair_edition_code", "fair_editions.csv", row_number)
@@ -207,34 +244,17 @@ def _validate_archive(data: ArchiveData) -> None:
         for field in ("fair_name", "city", "venue"):
             _required(row, field, "fair_editions.csv", row_number)
 
-    companies: dict[str, dict[str, str]] = {}
+    companies = _reconciled_company_details(data.rows["companies_and_contacts.csv"])
     contact_companies: dict[str, str] = {}
     for row_number, row in data.rows["companies_and_contacts.csv"]:
         code = _required(row, "company_code", "companies_and_contacts.csv", row_number)
-        _required(row, "contact_code", "companies_and_contacts.csv", row_number)
-        details = {field: _clean(row[field]) for field in ("company_name", "province_code", "region", "sales_rep")}
-        if not details["company_name"]:
-            raise ArchiveValidationError("companies_and_contacts.csv", row_number, "company_name is required")
-        existing = companies.get(code)
-        if existing is None:
-            companies[code] = details
-        else:
-            for field, value in details.items():
-                if value and existing[field] and _normalized(value) != _normalized(existing[field]):
-                    raise ArchiveValidationError(
-                        "companies_and_contacts.csv",
-                        row_number,
-                        f"company {code} has conflicting {field}",
-                    )
-                if not existing[field] and value:
-                    existing[field] = value
-        contact_code = _clean(row["contact_code"])
+        contact_code = _required(row, "contact_code", "companies_and_contacts.csv", row_number)
         existing_company = contact_companies.get(contact_code)
-        if existing_company is not None and existing_company != code:
+        if existing_company is not None:
             raise ArchiveValidationError(
                 "companies_and_contacts.csv",
                 row_number,
-                f"contact {contact_code} belongs to both {existing_company} and {code}",
+                f"duplicate contact {contact_code}",
             )
         contact_companies[contact_code] = code
 
@@ -267,8 +287,14 @@ def _validate_archive(data: ArchiveData) -> None:
             _non_negative(value, field, "opportunities.csv", row_number)
         _parsed(parse_date, row, "expected_close_on", "opportunities.csv", row_number)
 
+    activity_entry_ids: set[str] = set()
     for row_number, row in data.rows["activity_log.csv"]:
-        _required(row, "entry_id", "activity_log.csv", row_number)
+        entry_id = _required(row, "entry_id", "activity_log.csv", row_number)
+        if entry_id in activity_entry_ids:
+            raise ArchiveValidationError(
+                "activity_log.csv", row_number, f"duplicate activity entry {entry_id}"
+            )
+        activity_entry_ids.add(entry_id)
         company_code = _required(row, "company_code", "activity_log.csv", row_number)
         if company_code not in companies:
             raise ArchiveValidationError("activity_log.csv", row_number, f"unknown company {company_code}")
@@ -292,12 +318,6 @@ def _validate_archive(data: ArchiveData) -> None:
             raise ArchiveValidationError("activity_log.csv", row_number, "invalid completion_marker")
         if activity_type == ActivityType.TASK and marker not in {"Y", "N"}:
             raise ArchiveValidationError("activity_log.csv", row_number, "task completion_marker must be Y or N")
-        if activity_type == ActivityType.TASK and not opportunity_code:
-            # The source supports company-level tasks but FollowUp requires an opportunity.
-            # These are retained as task activities during import.
-            continue
-        if activity_type == ActivityType.TASK and follow_up_on is None:
-            continue
 
     entities = data.manifest.get("entities")
     expected_entities = {
@@ -312,6 +332,7 @@ def _validate_archive(data: ArchiveData) -> None:
     for name, actual in expected_entities.items():
         if entities.get(name) != actual:
             raise ArchiveValidationError("manifest.json", 1, f"entity count mismatch for {name}")
+    return companies
 
 
 def _bulk_create(model, objects: list) -> None:
@@ -341,151 +362,155 @@ def import_archive(archive_dir: Path) -> ImportBatch:
     ).first()
     if existing is not None:
         return existing
-    _validate_archive(data)
+    company_details = _validate_archive(data)
 
-    with transaction.atomic():
-        batch = ImportBatch.objects.create(
-            source_name=source_name,
-            source_checksum=data.manifest_checksum,
-            status="importing",
-        )
-        fair_objects = [
-            FairEdition(
-                legacy_code=_clean(row["fair_edition_code"]),
-                fair_name=_clean(row["fair_name"]),
-                city=_clean(row["city"]),
-                venue=_clean(row["venue"]),
-                starts_on=parse_date(row["starts_on"]),
-                ends_on=parse_date(row["ends_on"]),
-                max_stand_height_m=parse_decimal(row["max_stand_height_m"]),
+    try:
+        with transaction.atomic():
+            batch, created = ImportBatch.objects.get_or_create(
+                source_name=source_name,
+                defaults={"source_checksum": data.manifest_checksum, "status": "importing"},
             )
-            for _, row in data.rows["fair_editions.csv"]
-        ]
-        _bulk_create(FairEdition, fair_objects)
-        fair_map = FairEdition.objects.in_bulk(
-            [fair.legacy_code for fair in fair_objects], field_name="legacy_code"
-        )
-
-        company_details: dict[str, dict[str, str]] = {}
-        for _, row in data.rows["companies_and_contacts.csv"]:
-            code = _clean(row["company_code"])
-            company_details.setdefault(
-                code,
-                {
-                    "name": _clean(row["company_name"]),
-                    "province_code": _clean(row["province_code"]),
-                    "region": _clean(row["region"]),
-                    "sales_rep": _clean(row["sales_rep"]),
-                },
-            )
-        company_objects = [
-            Company(legacy_code=code, **details) for code, details in company_details.items()
-        ]
-        _bulk_create(Company, company_objects)
-        company_map = Company.objects.in_bulk(
-            [company.legacy_code for company in company_objects], field_name="legacy_code"
-        )
-
-        contact_objects = [
-            Contact(
-                legacy_code=_clean(row["contact_code"]),
-                company=company_map[_clean(row["company_code"])],
-                first_name=_clean(row["contact_first_name"]),
-                last_name=_clean(row["contact_last_name"]),
-                email=_clean(row["email"]),
-                phone=_clean(row["phone"]),
-                fax=_clean(row["fax"]),
-            )
-            for _, row in data.rows["companies_and_contacts.csv"]
-        ]
-        _bulk_create(Contact, contact_objects)
-        contact_map = Contact.objects.in_bulk(
-            [contact.legacy_code for contact in contact_objects], field_name="legacy_code"
-        )
-
-        opportunity_objects = [
-            Opportunity(
-                legacy_code=_clean(row["opportunity_code"]),
-                company=company_map[_clean(row["company_code"])],
-                primary_contact=contact_map.get(_clean(row["contact_code"])),
-                fair_edition=fair_map[_clean(row["fair_edition_code"])],
-                description=_clean(row["description"]),
-                amount_eur=parse_decimal(row["amount_eur"]),
-                sales_stage=normalize_status(row["legacy_status"]),
-                raw_legacy_status=row["legacy_status"],
-                opened_on=parse_date(row["opened_on"]),
-                expected_close_on=parse_date(row["expected_close_on"]),
-                historical_campaign_code=_clean(row["historical_campaign_code"]),
-                stand_area_sqm=parse_decimal(row["stand_area_sqm"]),
-                client_budget_eur=parse_decimal(row["client_budget_eur"]),
-                requested_height_m=parse_decimal(row["requested_height_m"]),
-                brief_notes=row["brief_notes"],
-            )
-            for _, row in data.rows["opportunities.csv"]
-        ]
-        _bulk_create(Opportunity, opportunity_objects)
-        opportunity_map = Opportunity.objects.in_bulk(
-            [opportunity.legacy_code for opportunity in opportunity_objects], field_name="legacy_code"
-        )
-
-        activity_objects: list[Activity] = []
-        follow_up_objects: list[FollowUp] = []
-        activity_accounted_rows = 0
-        for row_number, row in data.rows["activity_log.csv"]:
-            activity_type = normalize_status(row["activity_type"])
-            opportunity = opportunity_map.get(_clean(row["opportunity_code"]))
-            occurred_at = parse_datetime(row["occurred_at"])
-            follow_up_on = parse_date(row["follow_up_on"])
-            marker = _clean(row["completion_marker"])
-            if activity_type == ActivityType.TASK and opportunity is not None:
-                follow_up_objects.append(
-                    FollowUp(
-                        opportunity=opportunity,
-                        # FollowUp.due_on is non-null in the Task 2 schema; archive tasks
-                        # without a source due date retain their creation date as the only
-                        # available scheduling value.
-                        due_on=follow_up_on or occurred_at.date(),
-                        summary=row["details"],
-                        created_at=occurred_at,
-                        author=_clean(row["legacy_author"]),
-                        status=(
-                            FollowUpStatus.COMPLETED
-                            if marker == "Y"
-                            else FollowUpStatus.OPEN
-                        ),
-                    )
+            if not created and batch.status == "completed":
+                return batch
+            if not created:
+                batch.source_checksum = data.manifest_checksum
+                batch.status = "importing"
+                batch.record_count = 0
+                batch.file_counts = {}
+                batch.error_message = ""
+                batch.save(
+                    update_fields=["source_checksum", "status", "record_count", "file_counts", "error_message"]
                 )
-            else:
-                activity_objects.append(
-                    Activity(
-                        legacy_code=_clean(row["entry_id"]),
-                        company=company_map[_clean(row["company_code"])],
-                        opportunity=opportunity,
-                        activity_type=activity_type,
-                        occurred_at=occurred_at,
-                        details=row["details"],
-                        completed={"Y": True, "N": False}.get(marker),
-                        legacy_author=_clean(row["legacy_author"]),
-                        author=_clean(row["legacy_author"]),
-                    )
+            fair_objects = [
+                FairEdition(
+                    legacy_code=_clean(row["fair_edition_code"]),
+                    fair_name=_clean(row["fair_name"]),
+                    city=_clean(row["city"]),
+                    venue=_clean(row["venue"]),
+                    starts_on=parse_date(row["starts_on"]),
+                    ends_on=parse_date(row["ends_on"]),
+                    max_stand_height_m=parse_decimal(row["max_stand_height_m"]),
                 )
-                if follow_up_on is not None and opportunity is not None:
+                for _, row in data.rows["fair_editions.csv"]
+            ]
+            _bulk_create(FairEdition, fair_objects)
+            fair_map = FairEdition.objects.in_bulk(
+                [fair.legacy_code for fair in fair_objects], field_name="legacy_code"
+            )
+
+            company_objects = [
+                Company(legacy_code=code, **details) for code, details in company_details.items()
+            ]
+            _bulk_create(Company, company_objects)
+            company_map = Company.objects.in_bulk(
+                [company.legacy_code for company in company_objects], field_name="legacy_code"
+            )
+
+            contact_objects = [
+                Contact(
+                    legacy_code=_clean(row["contact_code"]),
+                    company=company_map[_clean(row["company_code"])],
+                    first_name=_clean(row["contact_first_name"]),
+                    last_name=_clean(row["contact_last_name"]),
+                    email=_clean(row["email"]),
+                    phone=_clean(row["phone"]),
+                    fax=_clean(row["fax"]),
+                )
+                for _, row in data.rows["companies_and_contacts.csv"]
+            ]
+            _bulk_create(Contact, contact_objects)
+            contact_map = Contact.objects.in_bulk(
+                [contact.legacy_code for contact in contact_objects], field_name="legacy_code"
+            )
+
+            opportunity_objects = [
+                Opportunity(
+                    legacy_code=_clean(row["opportunity_code"]),
+                    company=company_map[_clean(row["company_code"])],
+                    primary_contact=contact_map.get(_clean(row["contact_code"])),
+                    fair_edition=fair_map[_clean(row["fair_edition_code"])],
+                    description=_clean(row["description"]),
+                    amount_eur=parse_decimal(row["amount_eur"]),
+                    sales_stage=normalize_status(row["legacy_status"]),
+                    raw_legacy_status=row["legacy_status"],
+                    opened_on=parse_date(row["opened_on"]),
+                    expected_close_on=parse_date(row["expected_close_on"]),
+                    historical_campaign_code=_clean(row["historical_campaign_code"]),
+                    stand_area_sqm=parse_decimal(row["stand_area_sqm"]),
+                    client_budget_eur=parse_decimal(row["client_budget_eur"]),
+                    requested_height_m=parse_decimal(row["requested_height_m"]),
+                    brief_notes=row["brief_notes"],
+                )
+                for _, row in data.rows["opportunities.csv"]
+            ]
+            _bulk_create(Opportunity, opportunity_objects)
+            opportunity_map = Opportunity.objects.in_bulk(
+                [opportunity.legacy_code for opportunity in opportunity_objects], field_name="legacy_code"
+            )
+
+            activity_objects: list[Activity] = []
+            follow_up_objects: list[FollowUp] = []
+            activity_accounted_rows = 0
+            for _, row in data.rows["activity_log.csv"]:
+                activity_type = normalize_status(row["activity_type"])
+                opportunity = opportunity_map.get(_clean(row["opportunity_code"]))
+                occurred_at = parse_datetime(row["occurred_at"])
+                follow_up_on = parse_date(row["follow_up_on"])
+                marker = _clean(row["completion_marker"])
+                company = company_map[_clean(row["company_code"])]
+                if activity_type == ActivityType.TASK:
                     follow_up_objects.append(
                         FollowUp(
+                            company=company,
                             opportunity=opportunity,
                             due_on=follow_up_on,
                             summary=row["details"],
                             created_at=occurred_at,
                             author=_clean(row["legacy_author"]),
-                            status=FollowUpStatus.OPEN,
+                            status=(
+                                FollowUpStatus.COMPLETED if marker == "Y" else FollowUpStatus.OPEN
+                            ),
                         )
                     )
-            activity_accounted_rows += 1
-        _bulk_create(Activity, activity_objects)
-        _bulk_create(FollowUp, follow_up_objects)
+                else:
+                    activity_objects.append(
+                        Activity(
+                            legacy_code=_clean(row["entry_id"]),
+                            company=company,
+                            opportunity=opportunity,
+                            activity_type=activity_type,
+                            occurred_at=occurred_at,
+                            details=row["details"],
+                            completed={"Y": True, "N": False}.get(marker),
+                            legacy_author=_clean(row["legacy_author"]),
+                            author=_clean(row["legacy_author"]),
+                        )
+                    )
+                    if follow_up_on is not None:
+                        follow_up_objects.append(
+                            FollowUp(
+                                company=company,
+                                opportunity=opportunity,
+                                due_on=follow_up_on,
+                                summary=row["details"],
+                                created_at=occurred_at,
+                                author=_clean(row["legacy_author"]),
+                                status=FollowUpStatus.OPEN,
+                            )
+                        )
+                activity_accounted_rows += 1
+            _bulk_create(Activity, activity_objects)
+            _bulk_create(FollowUp, follow_up_objects)
 
-        batch.status = "completed"
-        batch.record_count = sum(len(rows) for rows in data.rows.values())
-        batch.file_counts = _file_counts(data, activity_accounted_rows)
-        batch.save(update_fields=["status", "record_count", "file_counts"])
-        return batch
+            batch.status = "completed"
+            batch.record_count = sum(len(rows) for rows in data.rows.values())
+            batch.file_counts = _file_counts(data, activity_accounted_rows)
+            batch.save(update_fields=["status", "record_count", "file_counts"])
+            return batch
+    except IntegrityError:
+        completed = ImportBatch.objects.filter(
+            source_name=source_name, source_checksum=data.manifest_checksum, status="completed"
+        ).first()
+        if completed is not None:
+            return completed
+        raise

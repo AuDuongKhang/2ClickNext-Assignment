@@ -93,6 +93,7 @@ def activity_factory():
 def follow_up_factory(opportunity):
     def create(due_on: date, summary: str) -> FollowUp:
         return FollowUp.objects.create(
+            company=opportunity.company,
             opportunity=opportunity,
             due_on=due_on,
             summary=summary,
