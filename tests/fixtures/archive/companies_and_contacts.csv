@@ -1,0 +1,4 @@
+legacy_row_id;company_code;company_name;province_code;region;sales_rep;contact_code;contact_first_name;contact_last_name;email;phone;fax;legacy_print_layout
+AN-001;CO-001;Aster Cosmetics S.r.l.;BA;Apulia;Casey Martin;CO-001-P01;Chris;Conti;chris@example.test;+39 02 90000101;;FORM-2|ROW-1
+AN-002;CO-001;Aster Cosmetics S.r.l.;BA;Apulia;Casey Martin;CO-001-P02;Giulia;De Luca;giulia@example.test;+39 02 90000102;;FORM-2|ROW-2
+AN-003;CO-002;Rivamare Packaging S.r.l.;FI;Tuscany;Jordan Silva;CO-002-P01;Dana;Greco;dana@example.test;+39 02 90000203;;FORM-3|ROW-1

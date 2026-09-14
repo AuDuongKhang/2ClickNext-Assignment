@@ -1,0 +1,4 @@
+opportunity_code;company_code;contact_code;description;amount_eur;legacy_status;opened_on;expected_close_on;historical_campaign_code;fair_edition_code;stand_area_sqm;client_budget_eur;requested_height_m;brief_notes
+OP-001;CO-001;CO-001-P01;Product launch stand;48000,00; OPEN ;15/01/2026;30/11/2026;CMP-2025-REF;BEAUTY-2026;80,00;50000,00;4,00;Requested height exceeds the fair limit and remains a customer request.
+OP-002;CO-002;;Packaging launch stand;;Won;01/01/2026;;;PACK-2026;;; ;Source has unknown commercial values.
+OP-003;CO-001;CO-001-P02;Summer modular stand;12500,00;Won;10/02/2026;15/06/2026;CMP-2024-WEB;BEAUTY-2026;32,00;13000,00;3,00;A completed legacy task belongs to this opportunity.

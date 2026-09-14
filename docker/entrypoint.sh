@@ -2,6 +2,7 @@
 set -eu
 
 python manage.py migrate --noinput
+python manage.py import_archive /data
 python manage.py collectstatic --noinput
 
 if [ "$#" -gt 0 ]; then
