@@ -17,6 +17,12 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "core.apps.CoreConfig",
+    "crm.apps.CrmConfig",
+    "fairs.apps.FairsConfig",
+    "opportunities.apps.OpportunitiesConfig",
+    "activities.apps.ActivitiesConfig",
+    "handoffs.apps.HandoffsConfig",
+    "imports.apps.ImportsConfig",
 ]
 
 MIDDLEWARE = [
