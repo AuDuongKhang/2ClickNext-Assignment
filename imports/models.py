@@ -7,4 +7,5 @@ class ImportBatch(models.Model):
     status = models.CharField(max_length=32)
     imported_at = models.DateTimeField(auto_now_add=True)
     record_count = models.PositiveIntegerField(default=0)
+    file_counts = models.JSONField(default=dict)
     error_message = models.TextField(blank=True)

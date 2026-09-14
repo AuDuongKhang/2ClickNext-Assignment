@@ -9,7 +9,7 @@ class FairEdition(models.Model):
     venue = models.CharField(max_length=255)
     starts_on = models.DateField()
     ends_on = models.DateField()
-    max_stand_height_m = models.DecimalField(max_digits=5, decimal_places=2)
+    max_stand_height_m = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
 
     class Meta:
         constraints = [
@@ -18,7 +18,7 @@ class FairEdition(models.Model):
                 name="fair_edition_end_not_before_start",
             ),
             models.CheckConstraint(
-                condition=Q(max_stand_height_m__gte=0),
+                condition=Q(max_stand_height_m__isnull=True) | Q(max_stand_height_m__gte=0),
                 name="fair_edition_height_non_negative",
             ),
         ]

@@ -30,6 +30,7 @@ class Opportunity(models.Model):
     description = models.TextField()
     amount_eur = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     sales_stage = models.CharField(max_length=16, choices=SalesStage, default=SalesStage.OPEN)
+    raw_legacy_status = models.CharField(max_length=64, blank=True)
     opened_on = models.DateField(null=True, blank=True)
     expected_close_on = models.DateField(null=True, blank=True)
     historical_campaign_code = models.CharField(max_length=128, blank=True)

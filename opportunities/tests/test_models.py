@@ -54,3 +54,18 @@ def test_requested_height_above_fair_limit_is_retained(company, fair_edition):
     )
 
     opportunity.full_clean()
+
+
+@pytest.mark.django_db
+def test_raw_legacy_status_is_preserved_separately_from_sales_stage(company, fair_edition):
+    opportunity = Opportunity.objects.create(
+        legacy_code="OP-RAW-STATUS",
+        company=company,
+        fair_edition=fair_edition,
+        description="Legacy status import",
+        raw_legacy_status=" Open ",
+        sales_stage="open",
+    )
+
+    assert opportunity.raw_legacy_status == " Open "
+    assert opportunity.sales_stage == "open"

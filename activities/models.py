@@ -12,6 +12,11 @@ class ActivityType(models.TextChoices):
     TASK = "task", "Task"
 
 
+class FollowUpStatus(models.TextChoices):
+    OPEN = "open", "Open"
+    COMPLETED = "completed", "Completed"
+
+
 class Activity(models.Model):
     legacy_code = models.CharField(max_length=64, unique=True)
     company = models.ForeignKey(Company, on_delete=models.PROTECT, related_name="activities")
@@ -27,6 +32,7 @@ class Activity(models.Model):
     details = models.TextField()
     completed = models.BooleanField(null=True, blank=True)
     legacy_author = models.CharField(max_length=255, blank=True)
+    author = models.CharField(max_length=255, blank=True)
 
     class Meta:
         indexes = [
@@ -42,6 +48,9 @@ class FollowUp(models.Model):
     created_at = models.DateTimeField()
     author = models.CharField(max_length=255)
     completed_at = models.DateTimeField(null=True, blank=True)
+    status = models.CharField(
+        max_length=16, choices=FollowUpStatus, default=FollowUpStatus.OPEN
+    )
 
     class Meta:
         indexes = [models.Index(fields=["due_on", "completed_at"])]
