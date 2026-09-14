@@ -2,6 +2,14 @@
 .env
 .env.*
 !.env.example
+docs/superpowers/**
+.coverage
+coverage.xml
+htmlcov/
+staticfiles/
+media/
+*.sqlite3
+*.log
 
 # Build output (adjust for your stack).
 node_modules/
