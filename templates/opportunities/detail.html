@@ -15,11 +15,11 @@
       <dt>Fair edition</dt><dd>{{ opportunity.fair_edition.legacy_code }} — {{ opportunity.fair_edition.fair_name }}</dd>
       <dt>Sales stage</dt><dd>{{ opportunity.get_sales_stage_display }}</dd>
       <dt>Primary contact</dt><dd>{% if opportunity.primary_contact %}{{ opportunity.primary_contact.full_name|default:opportunity.primary_contact.legacy_code }}{% else %}—{% endif %}</dd>
-      <dt>Opportunity value</dt><dd>{% if opportunity.amount_eur is not None %}€{{ opportunity.amount_eur|floatformat:"2g" }}{% else %}—{% endif %}</dd>
-      <dt>Client budget</dt><dd>{% if opportunity.client_budget_eur is not None %}€{{ opportunity.client_budget_eur|floatformat:"2g" }}{% else %}—{% endif %}</dd>
-      <dt>Stand area</dt><dd>{% if opportunity.stand_area_sqm is not None %}{{ opportunity.stand_area_sqm|floatformat:2 }} m²{% else %}—{% endif %}</dd>
-      <dt>Requested height</dt><dd>{% if opportunity.requested_height_m is not None %}{{ opportunity.requested_height_m|floatformat:2 }} m{% else %}—{% endif %}</dd>
-      <dt>Maximum stand height</dt><dd>{% if opportunity.fair_edition.max_stand_height_m is not None %}{{ opportunity.fair_edition.max_stand_height_m|floatformat:2 }} m{% else %}—{% endif %}</dd>
+      <dt>Opportunity value</dt><dd>{% if decimal_displays.amount_eur %}€{{ decimal_displays.amount_eur }}{% else %}—{% endif %}</dd>
+      <dt>Client budget</dt><dd>{% if decimal_displays.client_budget_eur %}€{{ decimal_displays.client_budget_eur }}{% else %}—{% endif %}</dd>
+      <dt>Stand area</dt><dd>{% if decimal_displays.stand_area_sqm %}{{ decimal_displays.stand_area_sqm }} m²{% else %}—{% endif %}</dd>
+      <dt>Requested height</dt><dd>{% if decimal_displays.requested_height_m %}{{ decimal_displays.requested_height_m }} m{% else %}—{% endif %}</dd>
+      <dt>Maximum stand height</dt><dd>{% if decimal_displays.max_stand_height_m %}{{ decimal_displays.max_stand_height_m }} m{% else %}—{% endif %}</dd>
       <dt>Brief notes</dt><dd>{{ opportunity.brief_notes|default:"—" }}</dd>
     </dl>
     {% if height_conflict %}<p role="alert">Requested height exceeds the fair maximum.</p>{% endif %}
@@ -27,16 +27,16 @@
 
   <section aria-labelledby="opportunity-activity">
     <h2 id="opportunity-activity">Opportunity activity</h2>
-    <ul>{% for activity in activities %}<li><time datetime="{{ activity.occurred_at|date:'c' }}">{{ activity.occurred_at }}</time> — {{ activity.get_activity_type_display }}: {{ activity.details }}</li>{% empty %}<li>No activity recorded for this opportunity.</li>{% endfor %}</ul>
+    <ul>{% for activity in activities %}<li><time datetime="{{ activity.occurred_at|date:'c' }}">{{ activity.occurred_at|date:"d/m/Y H:i" }}</time> — {{ activity.get_activity_type_display }}: {{ activity.details }}</li>{% empty %}<li>No activity recorded for this opportunity.</li>{% endfor %}</ul>
   </section>
 
   <section aria-labelledby="open-follow-ups">
     <h2 id="open-follow-ups">Open follow-ups</h2>
-    <ul>{% for follow_up in open_follow_ups %}<li>{% if follow_up.due_on %}<time datetime="{{ follow_up.due_on|date:'Y-m-d' }}">Due {{ follow_up.due_on }}</time> — {% endif %}{{ follow_up.summary }}</li>{% empty %}<li>No open follow-ups for this opportunity.</li>{% endfor %}</ul>
+    <ul>{% for follow_up in open_follow_ups %}<li>{% if follow_up.due_on %}<time datetime="{{ follow_up.due_on|date:'Y-m-d' }}">Due {{ follow_up.due_on|date:"d/m/Y" }}</time> — {% endif %}{{ follow_up.summary }}</li>{% empty %}<li>No open follow-ups for this opportunity.</li>{% endfor %}</ul>
   </section>
 
   <section aria-labelledby="handoff-history">
     <h2 id="handoff-history">Handoff history</h2>
-    <ul>{% for handoff_run in handoff_runs %}<li><time datetime="{{ handoff_run.created_at|date:'c' }}">{{ handoff_run.created_at }}</time> — {{ handoff_run.decision }}: {{ handoff_run.reason }}</li>{% empty %}<li>No handoff runs recorded.</li>{% endfor %}</ul>
+    <ul>{% for handoff_run in handoff_runs %}<li><time datetime="{{ handoff_run.created_at|date:'c' }}">{{ handoff_run.created_at|date:"d/m/Y H:i" }}</time> — {{ handoff_run.decision }}: {{ handoff_run.reason }}</li>{% empty %}<li>No handoff runs recorded.</li>{% endfor %}</ul>
   </section>
 {% endblock %}

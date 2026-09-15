@@ -29,13 +29,7 @@ class OpportunityWorkspace:
 
 def get_opportunity_workspace(legacy_code: str) -> OpportunityWorkspace:
     """Load one opportunity and its bounded, opportunity-scoped workspace data."""
-    opportunity = (
-        Opportunity.objects.select_related("company", "primary_contact", "fair_edition")
-        .filter(legacy_code=legacy_code)
-        .first()
-    )
-    if opportunity is None:
-        raise Opportunity.DoesNotExist
+    opportunity = get_opportunity(legacy_code)
 
     activities = list(
         Activity.objects.filter(opportunity=opportunity)
@@ -56,3 +50,15 @@ def get_opportunity_workspace(legacy_code: str) -> OpportunityWorkspace:
         open_follow_ups=open_follow_ups,
         handoff_runs=handoff_runs,
     )
+
+
+def get_opportunity(legacy_code: str) -> Opportunity:
+    """Load only the related records needed to edit one opportunity."""
+    opportunity = (
+        Opportunity.objects.select_related("company", "primary_contact", "fair_edition")
+        .filter(legacy_code=legacy_code)
+        .first()
+    )
+    if opportunity is None:
+        raise Opportunity.DoesNotExist
+    return opportunity

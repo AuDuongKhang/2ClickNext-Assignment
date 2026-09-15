@@ -1,7 +1,9 @@
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
 import pytest
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from activities.models import FollowUp, FollowUpStatus
@@ -94,8 +96,8 @@ def test_edit_preserves_unknown_values_as_null(client, opportunity):
             "description": opportunity.description,
             "sales_stage": "qualified",
             "client_budget_eur": "",
-            "stand_area_sqm": "80.00",
-            "requested_height_m": "4.00",
+            "stand_area_sqm": "80,00",
+            "requested_height_m": "4,00",
             "brief_notes": "Reception and storage",
             "primary_contact": opportunity.primary_contact_id or "",
         },
@@ -116,12 +118,12 @@ def test_edit_updates_only_declared_fields_and_redirects_with_message(client, op
         {
             "description": "Updated reception stand",
             "sales_stage": "proposal",
-            "client_budget_eur": "12000.00",
-            "stand_area_sqm": "80.00",
-            "requested_height_m": "4.00",
+            "client_budget_eur": "12000,00",
+            "stand_area_sqm": "80,00",
+            "requested_height_m": "4,00",
             "brief_notes": "Reception and storage",
             "primary_contact": opportunity.primary_contact_id,
-            "amount_eur": "1.00",
+            "amount_eur": "1,00",
             "fair_edition": "",
         },
         follow=True,
@@ -181,11 +183,73 @@ def test_detail_shows_budget_and_height_constraint_warning_separately(client, op
 
     content = response.content.decode()
     assert "Opportunity value" in content
-    assert "15,000.00" in content
+    assert "15.000,00" in content
     assert "Client budget" in content
-    assert "12,000.00" in content
+    assert "12.000,00" in content
     assert "Requested height" in content
-    assert "6.00" in content
+    assert "6,00" in content
     assert "Maximum stand height" in content
-    assert "5.00" in content
+    assert "5,00" in content
     assert "Requested height exceeds the fair maximum." in content
+
+
+@pytest.mark.django_db
+def test_detail_formats_visible_dates_and_retains_iso_time_values(
+    client, opportunity, activity_factory
+):
+    activity = activity_factory(opportunity=opportunity, details="Scheduled call")
+    activity.occurred_at = timezone.make_aware(datetime(2027, 1, 2, 14, 5))
+    activity.save(update_fields=["occurred_at"])
+    FollowUp.objects.create(
+        company=opportunity.company,
+        opportunity=opportunity,
+        due_on=date(2027, 1, 4),
+        summary="Confirm floor area",
+        created_at=timezone.now(),
+        author="sales.user",
+    )
+    handoff = HandoffRun.objects.create(
+        opportunity=opportunity,
+        snapshot={},
+        decision="approved",
+        reason="Ready for build",
+        policy_version="v1",
+        status="completed",
+    )
+    local_handoff_time = timezone.localtime(handoff.created_at)
+
+    response = client.get(f"/opportunities/{opportunity.legacy_code}/")
+
+    content = response.content.decode()
+    assert "02/01/2027 14:05" in content
+    assert 'datetime="2027-01-02T14:05:00+01:00"' in content
+    assert "Due 04/01/2027" in content
+    assert local_handoff_time.strftime("%d/%m/%Y %H:%M") in content
+    assert (
+        f'datetime="{local_handoff_time.strftime("%Y-%m-%dT%H:%M:%S")}'
+        in content
+    )
+
+
+@pytest.mark.django_db
+def test_edit_form_renders_decimal_values_with_european_separators(client, opportunity):
+    opportunity.client_budget_eur = Decimal("12000.00")
+    opportunity.stand_area_sqm = Decimal("80.00")
+    opportunity.requested_height_m = Decimal("4.00")
+    opportunity.save()
+
+    response = client.get(f"/opportunities/{opportunity.legacy_code}/edit/")
+
+    content = response.content.decode()
+    assert 'name="client_budget_eur" value="12.000,00"' in content
+    assert 'name="stand_area_sqm" value="80,00"' in content
+    assert 'name="requested_height_m" value="4,00"' in content
+
+
+@pytest.mark.django_db
+def test_edit_get_does_not_load_workspace_history(client, opportunity):
+    with CaptureQueriesContext(connection) as queries:
+        response = client.get(f"/opportunities/{opportunity.legacy_code}/edit/")
+
+    assert response.status_code == 200
+    assert len(queries) <= 2

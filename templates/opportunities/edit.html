@@ -6,7 +6,7 @@
   <p><a href="{% url 'opportunity-detail' opportunity.legacy_code %}">Back to opportunity</a></p>
   <h1>Edit {{ opportunity.legacy_code }}</h1>
   <p>Fair edition: {{ opportunity.fair_edition.legacy_code }} — {{ opportunity.fair_edition.fair_name }}</p>
-  <p>Opportunity value (read-only): {% if opportunity.amount_eur is not None %}€{{ opportunity.amount_eur|floatformat:"2g" }}{% else %}—{% endif %}</p>
+  <p>Opportunity value (read-only): {% if decimal_displays.amount_eur %}€{{ decimal_displays.amount_eur }}{% else %}—{% endif %}</p>
   <form method="post">
     {% csrf_token %}
     {{ form.non_field_errors }}
