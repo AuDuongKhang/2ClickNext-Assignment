@@ -1,6 +1,7 @@
 from datetime import timedelta
 
 import pytest
+from django.contrib.messages import get_messages
 from django.urls import reverse
 from django.utils import timezone
 
@@ -25,6 +26,9 @@ def test_conversation_form_records_activity_and_follow_up(client, opportunity):
     follow_up = opportunity.follow_ups.get(summary="Confirm floor area")
     assert follow_up.company == opportunity.company
     assert follow_up.due_on.isoformat() == "2026-09-17"
+    assert [str(message) for message in get_messages(response.wsgi_request)] == [
+        "Conversation recorded."
+    ]
 
 
 @pytest.mark.django_db
@@ -37,6 +41,9 @@ def test_follow_up_form_allows_an_undated_opportunity_task(client, opportunity):
     assert response.status_code == 302
     follow_up = opportunity.follow_ups.get(summary="Confirm floor area")
     assert follow_up.due_on is None
+    assert [str(message) for message in get_messages(response.wsgi_request)] == [
+        "Follow-up scheduled."
+    ]
 
 
 @pytest.mark.django_db
@@ -83,3 +90,22 @@ def test_complete_follow_up_is_post_only_and_returns_to_inbox(client, follow_up_
     assert response.status_code == 302
     assert response.url == reverse("follow-up-list")
     assert follow_up.status == FollowUpStatus.COMPLETED
+    assert [str(message) for message in get_messages(response.wsgi_request)] == [
+        "Follow-up completed."
+    ]
+
+
+@pytest.mark.django_db
+def test_follow_up_inbox_orders_open_items_before_completed_items(
+    client, follow_up_factory
+):
+    completed = follow_up_factory(timezone.localdate(), "Completed first by date")
+    completed.status = FollowUpStatus.COMPLETED
+    completed.save(update_fields=["status"])
+    open_follow_up = follow_up_factory(
+        timezone.localdate() + timedelta(days=1), "Open first by status"
+    )
+
+    response = client.get(reverse("follow-up-list"))
+
+    assert list(response.context["follow_ups"]) == [open_follow_up, completed]

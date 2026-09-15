@@ -50,6 +50,13 @@ class FollowUp(models.Model):
         null=True,
         blank=True,
     )
+    source_activity = models.ForeignKey(
+        Activity,
+        on_delete=models.SET_NULL,
+        related_name="follow_ups",
+        null=True,
+        blank=True,
+    )
     due_on = models.DateField(null=True, blank=True)
     summary = models.TextField()
     created_at = models.DateTimeField()

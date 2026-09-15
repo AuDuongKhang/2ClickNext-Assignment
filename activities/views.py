@@ -1,3 +1,4 @@
+from django.contrib import messages
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
@@ -31,6 +32,7 @@ def conversation_new(request, legacy_code):
                 author=LOCAL_AUTHOR,
                 **form.cleaned_data,
             )
+            messages.success(request, "Conversation recorded.")
             return redirect("opportunity-detail", legacy_code=opportunity.legacy_code)
     else:
         form = ConversationForm()
@@ -48,6 +50,7 @@ def follow_up_new(request, legacy_code):
                 author=LOCAL_AUTHOR,
                 **form.cleaned_data,
             )
+            messages.success(request, "Follow-up scheduled.")
             return redirect("opportunity-detail", legacy_code=opportunity.legacy_code)
     else:
         form = FollowUpForm()
@@ -67,4 +70,5 @@ def follow_up_list(request):
 def follow_up_complete(request, pk):
     follow_up = get_object_or_404(FollowUp, pk=pk)
     complete_follow_up(follow_up)
+    messages.success(request, "Follow-up completed.")
     return redirect("follow-up-list")

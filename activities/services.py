@@ -18,10 +18,13 @@ def _local_legacy_code() -> str:
 
 
 @transaction.atomic
-def schedule_follow_up(*, company, opportunity=None, due_on=None, summary, author):
+def schedule_follow_up(
+    *, company, opportunity=None, source_activity=None, due_on=None, summary, author
+):
     return FollowUp.objects.create(
         company=company,
         opportunity=opportunity,
+        source_activity=source_activity,
         due_on=due_on,
         summary=summary,
         created_at=timezone.now(),
@@ -58,18 +61,21 @@ def record_conversation(
         follow_up = schedule_follow_up(
             company=opportunity.company,
             opportunity=opportunity,
+            source_activity=activity,
             due_on=follow_up_on,
             summary=follow_up_summary,
             author=author,
         )
-        follow_up.source_activity = activity
     return activity, follow_up
 
 
 @transaction.atomic
 def complete_follow_up(follow_up):
-    if follow_up.status == FollowUpStatus.OPEN:
-        follow_up.status = FollowUpStatus.COMPLETED
-        follow_up.completed_at = timezone.now()
-        follow_up.save(update_fields=["status", "completed_at"])
+    current = FollowUp.objects.select_for_update().get(pk=follow_up.pk)
+    if current.status == FollowUpStatus.OPEN:
+        current.status = FollowUpStatus.COMPLETED
+        current.completed_at = timezone.now()
+        current.save(update_fields=["status", "completed_at"])
+    follow_up.status = current.status
+    follow_up.completed_at = current.completed_at
     return follow_up
