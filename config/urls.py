@@ -8,4 +8,5 @@ urlpatterns = [
     path("", include("crm.urls")),
     path("", include("opportunities.urls")),
     path("", include("activities.urls")),
+    path("", include("handoffs.urls")),
 ]

@@ -7,6 +7,10 @@
   <p><a href="{% url 'opportunity-edit' opportunity.legacy_code %}">Edit opportunity</a></p>
   <p><a href="{% url 'conversation-new' opportunity.legacy_code %}">Record conversation</a></p>
   <p><a href="{% url 'follow-up-new' opportunity.legacy_code %}">Schedule follow-up</a> · <a href="{% url 'follow-up-list' %}">Follow-up inbox</a></p>
+  <form action="{% url 'handoff-run' opportunity.legacy_code %}" method="post">
+    {% csrf_token %}
+    <button type="submit">Run handoff assistant</button>
+  </form>
   <h1>{{ opportunity.description }}</h1>
   <p class="legacy-code">Opportunity: {{ opportunity.legacy_code }}</p>
 

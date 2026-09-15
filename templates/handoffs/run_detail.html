@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block title %}Handoff run {{ run.pk }} · Exhibition CRM{% endblock %}
+
+{% block content %}
+  <p><a href="{% url 'opportunity-detail' run.opportunity.legacy_code %}">Back to opportunity {{ run.opportunity.legacy_code }}</a></p>
+  <h1>Handoff run {{ run.pk }}</h1>
+  <p>Status: {{ run.status }}</p>
+
+  <section aria-labelledby="input-evidence">
+    <h2 id="input-evidence">Input evidence</h2>
+    <pre>{{ run.snapshot|pprint }}</pre>
+  </section>
+
+  <section aria-labelledby="preparer-draft">
+    <h2 id="preparer-draft">Preparer draft</h2>
+    <p>Deterministic local stand-in — no model call</p>
+    <pre>{{ run.preparer_output }}</pre>
+  </section>
+
+  <section aria-labelledby="checker-issues">
+    <h2 id="checker-issues">Checker issues</h2>
+    <p>Deterministic local stand-in — no model call</p>
+    <pre>{{ run.reviewer_output }}</pre>
+  </section>
+
+  <section aria-labelledby="coordinator-decision">
+    <h2 id="coordinator-decision">Coordinator decision</h2>
+    <p>Deterministic local stand-in — no model call</p>
+    <dl>
+      <dt>Decision</dt><dd>{{ run.decision }}</dd>
+      <dt>Reason</dt><dd>{{ run.reason }}</dd>
+      <dt>Technical readiness</dt><dd>{{ run.technical_readiness }}</dd>
+      <dt>Policy version</dt><dd>{{ run.policy_version }}</dd>
+    </dl>
+  </section>
+
+  {% if run.status == "failed" %}
+    <section aria-labelledby="run-error">
+      <h2 id="run-error">Safe error record</h2>
+      <p>{{ run.error_type }}: {{ run.error_message }}</p>
+    </section>
+  {% endif %}
+{% endblock %}
