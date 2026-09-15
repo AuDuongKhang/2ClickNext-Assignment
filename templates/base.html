@@ -1,0 +1,31 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Exhibition CRM{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+  <header class="site-header">
+    <nav aria-label="Primary navigation">
+      <a class="brand" href="{% url 'search' %}">Exhibition CRM</a>
+      <form action="{% url 'search' %}" method="get" role="search">
+        <label for="global-search">Search companies and contacts</label>
+        <input id="global-search" name="q" type="search" value="{{ query|default:'' }}">
+        <button type="submit">Search</button>
+      </form>
+    </nav>
+  </header>
+  {% if messages %}
+    <section class="messages" aria-label="Messages">
+      {% for message in messages %}<p>{{ message }}</p>{% endfor %}
+    </section>
+  {% endif %}
+  <main id="main-content" tabindex="-1">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

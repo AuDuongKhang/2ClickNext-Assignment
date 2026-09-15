@@ -1,0 +1,22 @@
+:root { color-scheme: light; font-family: system-ui, sans-serif; line-height: 1.5; }
+body { margin: 0; color: #172033; background: #f7f9fc; }
+.site-header { padding: 1rem; background: #102a43; color: #fff; }
+nav, main, .messages { max-width: 70rem; margin: auto; }
+nav { display: flex; gap: 1.25rem; align-items: center; flex-wrap: wrap; }
+.brand { color: #fff; font-weight: 700; text-decoration: none; }
+form { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+form label { font-weight: 600; }
+input, button { font: inherit; padding: .45rem .6rem; }
+button { color: #fff; background: #126782; border: 1px solid #0d4d61; border-radius: .2rem; }
+main, .messages { padding: 1.5rem 1rem; }
+section { margin-block: 1.5rem; }
+a { color: #075985; }
+.site-header a { color: #fff; }
+a:focus-visible, input:focus-visible, button:focus-visible { outline: 3px solid #f59e0b; outline-offset: 3px; }
+.skip-link { position: absolute; left: -999px; top: .5rem; padding: .5rem; background: #fff; color: #172033; }
+.skip-link:focus { left: .5rem; z-index: 1; }
+.result-list, .edition-group, .company-details { padding: 1rem; background: #fff; border-radius: .3rem; }
+.result-type, .legacy-code { color: #52606d; font-size: .9rem; }
+.company-details { display: grid; grid-template-columns: max-content 1fr; gap: .25rem 1rem; }
+.company-details dt { font-weight: 700; }
+.company-details dd { margin: 0; }

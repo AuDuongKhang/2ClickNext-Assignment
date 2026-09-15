@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block title %}Search · Exhibition CRM{% endblock %}
+
+{% block content %}
+  <h1>Search CRM</h1>
+  {% if query %}
+    <p>Results for <strong>{{ query }}</strong>.</p>
+    <section aria-labelledby="company-results">
+      <h2 id="company-results">Companies</h2>
+      {% if company_results %}
+        <ul class="result-list">
+          {% for company in company_results %}
+            <li><span class="result-type">Company</span> <a href="{% url 'company-detail' company.legacy_code %}">{{ company.name }}</a> <span class="legacy-code">{{ company.legacy_code }}</span></li>
+          {% endfor %}
+        </ul>
+      {% else %}<p>No company matches.</p>{% endif %}
+    </section>
+    <section aria-labelledby="contact-results">
+      <h2 id="contact-results">Contacts</h2>
+      {% if contact_results %}
+        <ul class="result-list">
+          {% for contact in contact_results %}
+            <li><span class="result-type">Contact</span> <a href="{% url 'company-detail' contact.company.legacy_code %}">{{ contact.full_name|default:contact.legacy_code }}</a> at <a href="{% url 'company-detail' contact.company.legacy_code %}">{{ contact.company.name }}</a> <span class="legacy-code">{{ contact.legacy_code }}</span></li>
+          {% endfor %}
+        </ul>
+      {% else %}<p>No contact matches.</p>{% endif %}
+    </section>
+  {% else %}
+    <p>Enter a company name, legacy code, contact name, email address, or phone number.</p>
+  {% endif %}
+{% endblock %}

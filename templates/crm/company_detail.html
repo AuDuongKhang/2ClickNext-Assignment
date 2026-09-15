@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block title %}{{ company.name }} · Exhibition CRM{% endblock %}
+
+{% block content %}
+  <p><a href="{% url 'search' %}">Back to search</a></p>
+  <h1>{{ company.name }}</h1>
+  <p class="legacy-code">Legacy code: {{ company.legacy_code }}</p>
+  <dl class="company-details">
+    <dt>Region</dt><dd>{{ company.region|default:"—" }}</dd>
+    <dt>Province</dt><dd>{{ company.province_code|default:"—" }}</dd>
+    <dt>Sales rep</dt><dd>{{ company.sales_rep|default:"—" }}</dd>
+  </dl>
+
+  <section aria-labelledby="contacts">
+    <h2 id="contacts">Contacts</h2>
+    <ul>{% for contact in company.contacts.all %}<li>{{ contact.full_name|default:contact.legacy_code }}{% if contact.email %}, {{ contact.email }}{% endif %}{% if contact.phone %}, {{ contact.phone }}{% endif %}</li>{% empty %}<li>No contacts recorded.</li>{% endfor %}</ul>
+  </section>
+
+  <section aria-labelledby="opportunities">
+    <h2 id="opportunities">Opportunities by fair edition</h2>
+    {% for group in edition_groups %}
+      <section class="edition-group" aria-labelledby="edition-{{ group.fair_edition.legacy_code }}">
+        <h3 id="edition-{{ group.fair_edition.legacy_code }}">{{ group.fair_edition.legacy_code }} — {{ group.fair_edition.fair_name }}</h3>
+        <p>{{ group.fair_edition.starts_on }} to {{ group.fair_edition.ends_on }}</p>
+        <ul>{% for opportunity in group.opportunities %}<li>{{ opportunity.legacy_code }}: {{ opportunity.description }}{% if opportunity.primary_contact %} — primary contact: {{ opportunity.primary_contact.full_name }}{% endif %}</li>{% endfor %}</ul>
+      </section>
+    {% empty %}<p>No opportunities recorded.</p>{% endfor %}
+  </section>
+
+  <section aria-labelledby="company-activity">
+    <h2 id="company-activity">Company activity</h2>
+    <ul>{% for activity in company_activities %}<li><time datetime="{{ activity.occurred_at|date:'c' }}">{{ activity.occurred_at }}</time> — {{ activity.get_activity_type_display }}: {{ activity.details }}</li>{% empty %}<li>No company-wide activity recorded.</li>{% endfor %}</ul>
+  </section>
+
+  <section aria-labelledby="opportunity-activity">
+    <h2 id="opportunity-activity">Opportunity activity</h2>
+    <ul>{% for activity in opportunity_activities %}<li><time datetime="{{ activity.occurred_at|date:'c' }}">{{ activity.occurred_at }}</time> — {{ activity.fair_edition.legacy_code }} / {{ activity.opportunity.legacy_code }}: {{ activity.details }}</li>{% empty %}<li>No opportunity activity recorded.</li>{% endfor %}</ul>
+  </section>
+{% endblock %}

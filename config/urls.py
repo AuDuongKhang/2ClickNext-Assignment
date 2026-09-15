@@ -1,6 +1,9 @@
-from django.urls import path
+from django.urls import include, path
 
 from core.views import health
 
 
-urlpatterns = [path("health/", health, name="health")]
+urlpatterns = [
+    path("health/", health, name="health"),
+    path("", include("crm.urls")),
+]

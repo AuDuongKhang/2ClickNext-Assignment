@@ -9,7 +9,7 @@ from typing import Callable
 from django.db import IntegrityError, transaction
 
 from activities.models import Activity, ActivityType, FollowUp, FollowUpStatus
-from crm.models import Company, Contact
+from crm.models import Company, Contact, normalize_phone
 from fairs.models import FairEdition
 from imports.models import ImportBatch
 from imports.parsers import normalize_status, parse_date, parse_datetime, parse_decimal
@@ -414,6 +414,7 @@ def import_archive(archive_dir: Path) -> ImportBatch:
                     last_name=_clean(row["contact_last_name"]),
                     email=_clean(row["email"]),
                     phone=_clean(row["phone"]),
+                    phone_search=normalize_phone(_clean(row["phone"])),
                     fax=_clean(row["fax"]),
                 )
                 for _, row in data.rows["companies_and_contacts.csv"]
