@@ -6,4 +6,5 @@ from core.views import health
 urlpatterns = [
     path("health/", health, name="health"),
     path("", include("crm.urls")),
+    path("", include("opportunities.urls")),
 ]
