@@ -5,6 +5,8 @@
 {% block content %}
   <p><a href="{% url 'company-detail' opportunity.company.legacy_code %}">Back to {{ opportunity.company.name }}</a></p>
   <p><a href="{% url 'opportunity-edit' opportunity.legacy_code %}">Edit opportunity</a></p>
+  <p><a href="{% url 'conversation-new' opportunity.legacy_code %}">Record conversation</a></p>
+  <p><a href="{% url 'follow-up-new' opportunity.legacy_code %}">Schedule follow-up</a> · <a href="{% url 'follow-up-list' %}">Follow-up inbox</a></p>
   <h1>{{ opportunity.description }}</h1>
   <p class="legacy-code">Opportunity: {{ opportunity.legacy_code }}</p>
 

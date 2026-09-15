@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block title %}Follow-up inbox · Exhibition CRM{% endblock %}
+
+{% block content %}
+  <h1>Follow-up inbox</h1>
+  <nav aria-label="Follow-up filters">
+    {% for filter_name in filters %}<a href="?filter={{ filter_name }}"{% if selected_filter == filter_name %} aria-current="page"{% endif %}>{{ filter_name|capfirst }}</a>{% endfor %}
+  </nav>
+  <ul>
+    {% for follow_up in follow_ups %}
+      <li>
+        {% if follow_up.due_on %}<time datetime="{{ follow_up.due_on|date:'Y-m-d' }}">Due {{ follow_up.due_on|date:"d/m/Y" }}</time> — {% endif %}
+        {{ follow_up.summary }} — {{ follow_up.company.name }}
+        {% if follow_up.opportunity %}({{ follow_up.opportunity.legacy_code }}){% endif %}
+        {% if follow_up.status == "open" %}
+          <form method="post" action="{% url 'follow-up-complete' follow_up.pk %}">
+            {% csrf_token %}<button type="submit">Complete</button>
+          </form>
+        {% endif %}
+      </li>
+    {% empty %}
+      <li>No follow-ups match this filter.</li>
+    {% endfor %}
+  </ul>
+{% endblock %}

@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+
+{% block title %}Schedule follow-up · Exhibition CRM{% endblock %}
+
+{% block content %}
+  <p><a href="{% url 'opportunity-detail' opportunity.legacy_code %}">Back to opportunity</a></p>
+  <h1>Schedule follow-up</h1>
+  <form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">Save follow-up</button>
+  </form>
+{% endblock %}
