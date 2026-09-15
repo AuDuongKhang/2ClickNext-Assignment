@@ -31,6 +31,8 @@
       <dt>Decision</dt><dd>{{ run.decision }}</dd>
       <dt>Reason</dt><dd>{{ run.reason }}</dd>
       <dt>Technical readiness</dt><dd>{{ run.technical_readiness }}</dd>
+      <dt>Should continue</dt><dd>{{ run.should_continue|yesno:"Yes,No" }}</dd>
+      <dt>Allowed scope</dt><dd>{{ run.allowed_scope }}</dd>
       <dt>Policy version</dt><dd>{{ run.policy_version }}</dd>
     </dl>
   </section>

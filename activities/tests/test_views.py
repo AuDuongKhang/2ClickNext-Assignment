@@ -5,7 +5,8 @@ from django.contrib.messages import get_messages
 from django.urls import reverse
 from django.utils import timezone
 
-from activities.models import FollowUpStatus
+from activities.models import FollowUp, FollowUpStatus
+from crm.models import Company
 
 
 @pytest.mark.django_db
@@ -109,3 +110,65 @@ def test_follow_up_inbox_orders_open_items_before_completed_items(
     response = client.get(reverse("follow-up-list"))
 
     assert list(response.context["follow_ups"]) == [open_follow_up, completed]
+
+
+@pytest.mark.django_db
+def test_follow_up_inbox_paginates_and_preserves_selected_filter(client, follow_up_factory):
+    for number in range(26):
+        follow_up_factory(timezone.localdate() + timedelta(days=number + 1), f"Paged {number:02d}")
+
+    first_page = client.get(reverse("follow-up-list"), {"filter": "upcoming"})
+    second_page = client.get(
+        reverse("follow-up-list"), {"filter": "upcoming", "page": 2}
+    )
+
+    assert first_page.context["page_obj"].number == 1
+    assert len(first_page.context["follow_ups"]) == 25
+    assert first_page.context["page_obj"].has_next() is True
+    assert second_page.context["page_obj"].number == 2
+    assert len(second_page.context["follow_ups"]) == 1
+    assert second_page.context["page_obj"].has_previous() is True
+    assert "Paged 25" in second_page.content.decode()
+    assert "filter=upcoming&amp;page=2" in first_page.content.decode()
+    assert "filter=upcoming&amp;page=1" in second_page.content.decode()
+
+
+@pytest.mark.django_db
+def test_follow_up_inbox_pagination_controls_are_absent_at_page_boundaries(
+    client, follow_up_factory
+):
+    for number in range(26):
+        follow_up_factory(
+            timezone.localdate() + timedelta(days=number + 1),
+            f"Boundary {number:02d}",
+        )
+
+    first_page = client.get(reverse("follow-up-list"), {"filter": "upcoming"})
+    last_page = client.get(
+        reverse("follow-up-list"), {"filter": "upcoming", "page": 2}
+    )
+
+    first_content = first_page.content.decode()
+    last_content = last_page.content.decode()
+    assert 'aria-label="Follow-up inbox pagination"' in first_content
+    assert 'rel="prev"' not in first_content
+    assert 'rel="next"' in first_content
+    assert 'rel="prev"' in last_content
+    assert 'rel="next"' not in last_content
+
+
+@pytest.mark.django_db
+def test_follow_up_inbox_links_company_and_opportunity_references(client, follow_up_factory):
+    follow_up = follow_up_factory(timezone.localdate(), "Linked follow-up")
+
+    response = client.get(reverse("follow-up-list"), {"filter": "all"})
+    content = response.content.decode()
+
+    assert (
+        f'href="{reverse("company-detail", args=[follow_up.company.legacy_code])}"'
+        in content
+    )
+    assert (
+        f'href="{reverse("opportunity-detail", args=[follow_up.opportunity.legacy_code])}"'
+        in content
+    )

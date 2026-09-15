@@ -11,8 +11,8 @@
     {% for follow_up in follow_ups %}
       <li>
         {% if follow_up.due_on %}<time datetime="{{ follow_up.due_on|date:'Y-m-d' }}">Due {{ follow_up.due_on|date:"d/m/Y" }}</time> — {% endif %}
-        {{ follow_up.summary }} — {{ follow_up.company.name }}
-        {% if follow_up.opportunity %}({{ follow_up.opportunity.legacy_code }}){% endif %}
+        {{ follow_up.summary }} — <a href="{% url 'company-detail' follow_up.company.legacy_code %}">{{ follow_up.company.name }}</a>
+        {% if follow_up.opportunity %}(<a href="{% url 'opportunity-detail' follow_up.opportunity.legacy_code %}">{{ follow_up.opportunity.legacy_code }}</a>){% endif %}
         {% if follow_up.status == "open" %}
           <form method="post" action="{% url 'follow-up-complete' follow_up.pk %}">
             {% csrf_token %}<button type="submit">Complete</button>
@@ -23,4 +23,15 @@
       <li>No follow-ups match this filter.</li>
     {% endfor %}
   </ul>
+  {% if page_obj.has_previous or page_obj.has_next %}
+    <nav aria-label="Follow-up inbox pagination">
+      <span aria-current="page">Page {{ page_obj.number }}</span>
+      {% if page_obj.has_previous %}
+        <a rel="prev" href="{% url 'follow-up-list' %}?filter={{ selected_filter|urlencode }}&amp;page={{ page_obj.previous_page_number }}">Previous</a>
+      {% endif %}
+      {% if page_obj.has_next %}
+        <a rel="next" href="{% url 'follow-up-list' %}?filter={{ selected_filter|urlencode }}&amp;page={{ page_obj.next_page_number }}">Next</a>
+      {% endif %}
+    </nav>
+  {% endif %}
 {% endblock %}

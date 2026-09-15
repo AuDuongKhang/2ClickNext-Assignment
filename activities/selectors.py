@@ -1,3 +1,4 @@
+from django.core.paginator import Paginator
 from django.db.models import Case, IntegerField, Value, When
 from django.utils import timezone
 
@@ -5,9 +6,10 @@ from .models import FollowUp, FollowUpStatus
 
 
 FOLLOW_UP_FILTERS = ("all", "overdue", "today", "upcoming", "completed")
+FOLLOW_UP_PAGE_SIZE = 25
 
 
-def get_follow_up_inbox(filter_name: str | None):
+def get_follow_up_inbox(filter_name: str | None, page: int = 1):
     selected_filter = filter_name if filter_name in FOLLOW_UP_FILTERS else "all"
     follow_ups = (
         FollowUp.objects.select_related("company", "opportunity")
@@ -31,4 +33,8 @@ def get_follow_up_inbox(filter_name: str | None):
     elif selected_filter == "completed":
         follow_ups = follow_ups.filter(status=FollowUpStatus.COMPLETED)
 
-    return selected_filter, follow_ups
+    try:
+        page = max(int(page), 1)
+    except (TypeError, ValueError):
+        page = 1
+    return selected_filter, Paginator(follow_ups, FOLLOW_UP_PAGE_SIZE).get_page(page)

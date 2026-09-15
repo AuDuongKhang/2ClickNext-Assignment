@@ -8,6 +8,8 @@ from .types import BriefDraft, CheckIssue, CheckResult, OpportunitySnapshot
 def prepare_brief(snapshot: OpportunitySnapshot) -> BriefDraft:
     if snapshot.fair_code is None or snapshot.client_budget_eur is None:
         proposed_next_step = "Ask sales to confirm the fair edition and client budget before technical intake."
+    elif snapshot.max_stand_height_m is None:
+        proposed_next_step = "Confirm the fair edition's maximum stand height before technical work begins."
     elif (
         snapshot.requested_height_m is not None
         and snapshot.max_stand_height_m is not None
@@ -31,6 +33,14 @@ def check_brief(draft: BriefDraft, snapshot: OpportunitySnapshot) -> CheckResult
         issues.append(CheckIssue("MISSING_AREA", "Stand area is required."))
     if snapshot.requested_height_m is None:
         issues.append(CheckIssue("MISSING_HEIGHT", "Requested stand height is required."))
+    if snapshot.fair_code is not None and snapshot.max_stand_height_m is None:
+        issues.append(
+            CheckIssue(
+                "UNKNOWN_FAIR_HEIGHT_LIMIT",
+                "The fair edition's maximum stand height is unknown; technical work must remain intake-only.",
+                {"fair_code": snapshot.fair_code},
+            )
+        )
     if (
         snapshot.requested_height_m is not None
         and snapshot.max_stand_height_m is not None
@@ -51,6 +61,7 @@ def check_brief(draft: BriefDraft, snapshot: OpportunitySnapshot) -> CheckResult
         "MISSING_BUDGET",
         "MISSING_AREA",
         "MISSING_HEIGHT",
+        "UNKNOWN_FAIR_HEIGHT_LIMIT",
         "HEIGHT_EXCEEDS_LIMIT",
     }
     proposal_is_safe = not (

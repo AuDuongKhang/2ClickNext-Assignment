@@ -42,6 +42,20 @@ def test_completed_run_updates_only_technical_readiness(opportunity):
 
 
 @pytest.mark.django_db
+def test_completed_run_persists_coordinator_continuation_and_scope(opportunity):
+    opportunity.client_budget_eur = Decimal("10000.00")
+    opportunity.stand_area_sqm = Decimal("80.00")
+    opportunity.requested_height_m = Decimal("4.00")
+    opportunity.save(update_fields=["client_budget_eur", "stand_area_sqm", "requested_height_m"])
+
+    run = run_handoff(opportunity)
+    run.refresh_from_db()
+
+    assert run.should_continue is True
+    assert run.allowed_scope == "technical_work"
+
+
+@pytest.mark.django_db
 def test_role_failure_is_audited_without_changing_previous_run(monkeypatch, opportunity):
     """An unexpected role error must become a safe, append-only audit row."""
     completed = run_handoff(opportunity)
@@ -56,6 +70,8 @@ def test_role_failure_is_audited_without_changing_previous_run(monkeypatch, oppo
     assert failed.status == "failed"
     assert failed.error_type == "RuntimeError"
     assert "Traceback" not in failed.error_message
+    assert failed.should_continue is False
+    assert failed.allowed_scope == "none"
 
 
 @pytest.mark.django_db

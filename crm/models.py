@@ -28,6 +28,9 @@ class Company(models.Model):
 
 class Contact(models.Model):
     legacy_code = models.CharField(max_length=64, unique=True)
+    legacy_row_id = models.CharField(
+        max_length=64, unique=True, null=True, blank=True, editable=False
+    )
     company = models.ForeignKey(Company, on_delete=models.PROTECT, related_name="contacts")
     first_name = models.CharField(max_length=128, blank=True)
     last_name = models.CharField(max_length=128, blank=True)

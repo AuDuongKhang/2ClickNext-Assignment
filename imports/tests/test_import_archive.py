@@ -52,15 +52,18 @@ def test_import_preserves_legacy_values_and_maps_activity_rows():
     missing_values = Opportunity.objects.get(legacy_code="OP-002")
     conversation = Activity.objects.get(legacy_code="AC-001")
     pending_task = FollowUp.objects.get(summary="Send updated height proposal")
+    contact = Contact.objects.get(legacy_code="CO-001-P01")
 
     assert complete.raw_legacy_status == " OPEN "
     assert complete.requested_height_m.as_tuple().digits == (4, 0, 0)
     assert missing_values.amount_eur is None
     assert missing_values.primary_contact is None
     assert conversation.author == "a.morgan"
+    assert contact.legacy_row_id == "AN-001"
     assert Activity.objects.filter(legacy_code="AC-003").count() == 0
     assert pending_task.status == "open"
     assert pending_task.author == "j.chen"
+    assert pending_task.legacy_entry_id == "AC-003"
     assert FollowUp.objects.filter(status="completed").count() == 1
 
 
@@ -87,7 +90,39 @@ def test_import_maps_every_task_and_company_follow_up_without_fabricating_due_da
     assert company_conversation.company.legacy_code == "CO-002"
     assert company_conversation.opportunity is None
     assert company_conversation.due_on == date(2026, 9, 12)
+    assert company_conversation.source_activity.legacy_code == "AC-006"
+    assert FollowUp.objects.get(summary="Confirmed requested height and plot").source_activity == Activity.objects.get(
+        legacy_code="AC-001"
+    )
     assert Activity.objects.filter(activity_type="task").count() == 0
+
+
+@pytest.mark.django_db(transaction=True)
+def test_import_reconciles_provenance_for_an_already_imported_batch():
+    import_archive(ARCHIVE)
+
+    Contact.objects.update(legacy_row_id=None)
+    FollowUp.objects.update(legacy_entry_id=None, source_activity=None)
+
+    first_reconciliation = import_archive(ARCHIVE)
+    counts_after_reconciliation = (
+        Company.objects.count(),
+        Contact.objects.count(),
+        Activity.objects.count(),
+        FollowUp.objects.count(),
+    )
+    second_reconciliation = import_archive(ARCHIVE)
+
+    assert first_reconciliation.pk == second_reconciliation.pk
+    assert counts_after_reconciliation == (
+        Company.objects.count(),
+        Contact.objects.count(),
+        Activity.objects.count(),
+        FollowUp.objects.count(),
+    )
+    assert Contact.objects.get(legacy_code="CO-001-P01").legacy_row_id == "AN-001"
+    assert FollowUp.objects.get(summary="Send updated height proposal").legacy_entry_id == "AC-003"
+    assert FollowUp.objects.get(summary="Company-level conversation follow-up").source_activity.legacy_code == "AC-006"
 
 
 @pytest.mark.django_db(transaction=True)

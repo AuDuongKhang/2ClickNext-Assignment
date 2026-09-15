@@ -23,7 +23,7 @@
       <section class="edition-group" aria-labelledby="edition-{{ group.fair_edition.legacy_code }}">
         <h3 id="edition-{{ group.fair_edition.legacy_code }}">{{ group.fair_edition.legacy_code }} — {{ group.fair_edition.fair_name }}</h3>
         <p>{{ group.fair_edition.starts_on }} to {{ group.fair_edition.ends_on }}</p>
-        <ul>{% for opportunity in group.opportunities %}<li>{{ opportunity.legacy_code }}: {{ opportunity.description }}{% if opportunity.primary_contact %} — primary contact: {{ opportunity.primary_contact.full_name }}{% endif %}</li>{% endfor %}</ul>
+        <ul>{% for opportunity in group.opportunities %}<li><a href="{% url 'opportunity-detail' opportunity.legacy_code %}">{{ opportunity.legacy_code }}</a>: {{ opportunity.description }}{% if opportunity.primary_contact %} — primary contact: {{ opportunity.primary_contact.full_name }}{% endif %}</li>{% endfor %}</ul>
       </section>
     {% empty %}<p>No opportunities recorded.</p>{% endfor %}
   </section>

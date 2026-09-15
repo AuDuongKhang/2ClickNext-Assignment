@@ -26,6 +26,13 @@
         </ul>
       {% else %}<p>No contact matches.</p>{% endif %}
     </section>
+    {% if has_previous or has_next %}
+      <nav aria-label="Search results pagination">
+        <span aria-current="page">Page {{ page }}</span>
+        {% if has_previous %}<a href="{% url 'search' %}?q={{ query|urlencode }}&amp;page={{ page|add:'-1' }}">Previous</a>{% endif %}
+        {% if has_next %}<a href="{% url 'search' %}?q={{ query|urlencode }}&amp;page={{ page|add:'1' }}">Next</a>{% endif %}
+      </nav>
+    {% endif %}
   {% else %}
     <p>Enter a company name, legacy code, contact name, email address, or phone number.</p>
   {% endif %}

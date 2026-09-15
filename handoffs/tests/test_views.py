@@ -53,6 +53,8 @@ def test_run_detail_shows_auditable_role_outputs_and_opportunity_link(client, op
         policy_version="2026-09-14.1",
         status="completed",
         technical_readiness="ready",
+        should_continue=True,
+        allowed_scope="technical_work",
     )
 
     response = client.get(reverse("handoff-run-detail", args=[run.pk]))
@@ -64,4 +66,28 @@ def test_run_detail_shows_auditable_role_outputs_and_opportunity_link(client, op
     assert "Continue" in content
     assert "ready_for_technical" in content
     assert "2026-09-14.1" in content
+    assert "Should continue" in content
+    assert "technical_work" in content
     assert reverse("opportunity-detail", args=[opportunity.legacy_code]) in content
+
+
+@pytest.mark.django_db
+def test_opportunity_detail_links_handoff_history_rows_to_run_detail(client, opportunity):
+    run = HandoffRun.objects.create(
+        opportunity=opportunity,
+        snapshot={"fair_code": "FAIR-2027"},
+        preparer_output="{}",
+        reviewer_output="{}",
+        decision="early_intake",
+        reason="Awaiting dimensions.",
+        policy_version="2026-09-14.1",
+        status="completed",
+        technical_readiness="early_intake",
+    )
+
+    response = client.get(reverse("opportunity-detail", args=[opportunity.legacy_code]))
+
+    assert (
+        f'href="{reverse("handoff-run-detail", args=[run.pk])}"'
+        in response.content.decode()
+    )

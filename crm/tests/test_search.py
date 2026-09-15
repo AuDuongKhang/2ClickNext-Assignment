@@ -1,5 +1,6 @@
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
+from django.urls import reverse
 import pytest
 
 from crm.models import Company, Contact
@@ -122,3 +123,35 @@ def test_search_limits_each_result_type_to_twenty_five_and_avoids_contact_n_plus
     assert len(response.context["company_results"]) == 25
     assert len(response.context["contact_results"]) == 25
     assert len(queries) <= 3
+
+
+@pytest.mark.django_db
+def test_search_page_two_returns_later_matches_and_exposes_continuation_links(client):
+    for number in range(27):
+        company = Company.objects.create(
+            legacy_code=f"CO-PAGE-{number:02d}", name=f"Paged Company {number:02d}"
+        )
+        Contact.objects.create(
+            legacy_code=f"CT-PAGE-{number:02d}",
+            company=company,
+            first_name="Paged",
+            last_name=f"Contact {number:02d}",
+            email=f"paged-{number:02d}@example.test",
+        )
+
+    first_page = client.get(reverse("search"), {"q": "Paged"})
+    second_page = client.get(reverse("search"), {"q": "Paged", "page": 2})
+
+    assert first_page.context["has_next_companies"] is True
+    assert first_page.context["has_next_contacts"] is True
+    assert first_page.context["has_previous_companies"] is False
+    assert first_page.context["has_previous_contacts"] is False
+    assert any(item.legacy_code == "CO-PAGE-25" for item in second_page.context["company_results"])
+    assert any(item.legacy_code == "CT-PAGE-25" for item in second_page.context["contact_results"])
+    assert second_page.context["has_previous_companies"] is True
+    assert second_page.context["has_previous_contacts"] is True
+    assert second_page.context["has_next_companies"] is False
+    assert second_page.context["has_next_contacts"] is False
+    content = first_page.content.decode()
+    assert f"{reverse('search')}?q=Paged&amp;page=2" in content
+    assert f"{reverse('search')}?q=Paged&amp;page=1" in second_page.content.decode()

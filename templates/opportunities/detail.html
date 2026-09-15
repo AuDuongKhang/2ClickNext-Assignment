@@ -43,6 +43,6 @@
 
   <section aria-labelledby="handoff-history">
     <h2 id="handoff-history">Handoff history</h2>
-    <ul>{% for handoff_run in handoff_runs %}<li><time datetime="{{ handoff_run.created_at|date:'c' }}">{{ handoff_run.created_at|date:"d/m/Y H:i" }}</time> — {{ handoff_run.decision }}: {{ handoff_run.reason }}</li>{% empty %}<li>No handoff runs recorded.</li>{% endfor %}</ul>
+    <ul>{% for handoff_run in handoff_runs %}<li><a href="{% url 'handoff-run-detail' handoff_run.pk %}"><time datetime="{{ handoff_run.created_at|date:'c' }}">{{ handoff_run.created_at|date:"d/m/Y H:i" }}</time> — {{ handoff_run.decision }}</a>: {{ handoff_run.reason }}</li>{% empty %}<li>No handoff runs recorded.</li>{% endfor %}</ul>
   </section>
 {% endblock %}

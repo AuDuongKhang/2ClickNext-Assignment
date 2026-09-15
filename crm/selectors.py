@@ -1,7 +1,6 @@
 from collections import OrderedDict
 from dataclasses import dataclass
 
-from django.contrib.postgres.lookups import TrigramSimilar
 from django.contrib.postgres.search import TrigramSimilarity
 from django.db.models import Case, IntegerField, Prefetch, Q, Value, When
 from django.db.models.functions import Greatest
@@ -21,6 +20,18 @@ class SearchResults:
     page: int
     companies: list[Company]
     contacts: list[Contact]
+    has_next_companies: bool = False
+    has_previous_companies: bool = False
+    has_next_contacts: bool = False
+    has_previous_contacts: bool = False
+
+    @property
+    def has_next(self) -> bool:
+        return self.has_next_companies or self.has_next_contacts
+
+    @property
+    def has_previous(self) -> bool:
+        return self.has_previous_companies or self.has_previous_contacts
 
 
 @dataclass(frozen=True)
@@ -37,10 +48,15 @@ class CompanyWorkspace:
     opportunity_activities: list[Activity]
 
 
-def _page_slice(page: int) -> slice:
+def _page_slice(page: int, *, extra: int = 0) -> slice:
     page = max(page, 1)
     start = (page - 1) * PAGE_SIZE
-    return slice(start, start + PAGE_SIZE)
+    return slice(start, start + PAGE_SIZE + extra)
+
+
+def _page_rows(queryset, page: int) -> tuple[list, bool]:
+    rows = list(queryset[_page_slice(page, extra=1)])
+    return rows[:PAGE_SIZE], len(rows) > PAGE_SIZE
 
 
 def search_crm(query: str, page: int = 1) -> SearchResults:
@@ -50,9 +66,8 @@ def search_crm(query: str, page: int = 1) -> SearchResults:
     if not cleaned_query:
         return SearchResults(query="", page=page, companies=[], contacts=[])
 
-    page_slice = _page_slice(page)
     normalized_phone = normalize_phone(cleaned_query)
-    companies = list(
+    company_queryset = (
         Company.objects.annotate(
             exact_match=Case(
                 When(legacy_code__iexact=cleaned_query, then=Value(0)),
@@ -62,8 +77,9 @@ def search_crm(query: str, page: int = 1) -> SearchResults:
             similarity=TrigramSimilarity("name", cleaned_query),
         )
         .filter(Q(legacy_code__iexact=cleaned_query) | Q(name__trigram_similar=cleaned_query))
-        .order_by("exact_match", "-similarity", "name", "legacy_code")[page_slice]
+        .order_by("exact_match", "-similarity", "name", "legacy_code")
     )
+    companies, has_next_companies = _page_rows(company_queryset, page)
     contact_matches = Q(legacy_code__iexact=cleaned_query)
     contact_rank_cases = [When(legacy_code__iexact=cleaned_query, then=Value(0))]
     if normalized_phone:
@@ -74,7 +90,7 @@ def search_crm(query: str, page: int = 1) -> SearchResults:
         | Q(last_name__trigram_similar=cleaned_query)
         | Q(email__trigram_similar=cleaned_query)
     )
-    contacts = list(
+    contact_queryset = (
         Contact.objects.select_related("company").annotate(
             exact_match=Case(
                 *contact_rank_cases,
@@ -88,9 +104,19 @@ def search_crm(query: str, page: int = 1) -> SearchResults:
             ),
         )
         .filter(contact_matches | fuzzy_contact_matches)
-        .order_by("exact_match", "-similarity", "last_name", "first_name", "legacy_code")[page_slice]
+        .order_by("exact_match", "-similarity", "last_name", "first_name", "legacy_code")
     )
-    return SearchResults(query=cleaned_query, page=page, companies=companies, contacts=contacts)
+    contacts, has_next_contacts = _page_rows(contact_queryset, page)
+    return SearchResults(
+        query=cleaned_query,
+        page=page,
+        companies=companies,
+        contacts=contacts,
+        has_next_companies=has_next_companies,
+        has_previous_companies=page > 1,
+        has_next_contacts=has_next_contacts,
+        has_previous_contacts=page > 1,
+    )
 
 
 def get_company_workspace(legacy_code: str) -> CompanyWorkspace:

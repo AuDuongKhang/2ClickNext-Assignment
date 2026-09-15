@@ -37,6 +37,8 @@ class HandoffRun(models.Model):
     technical_readiness = models.CharField(
         max_length=32, choices=TechnicalReadiness, default=TechnicalReadiness.NOT_REQUESTED
     )
+    should_continue = models.BooleanField(default=False)
+    allowed_scope = models.CharField(max_length=32, default="none")
     error_type = models.CharField(max_length=128, null=True, blank=True)
     error_message = models.TextField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

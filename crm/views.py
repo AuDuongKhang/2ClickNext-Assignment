@@ -19,6 +19,12 @@ def search(request):
             "page": results.page,
             "company_results": results.companies,
             "contact_results": results.contacts,
+            "has_next": results.has_next,
+            "has_previous": results.has_previous,
+            "has_next_companies": results.has_next_companies,
+            "has_previous_companies": results.has_previous_companies,
+            "has_next_contacts": results.has_next_contacts,
+            "has_previous_contacts": results.has_previous_contacts,
         },
     )
 

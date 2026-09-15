@@ -42,6 +42,9 @@ class Activity(models.Model):
 
 
 class FollowUp(models.Model):
+    legacy_entry_id = models.CharField(
+        max_length=64, unique=True, null=True, blank=True, editable=False
+    )
     company = models.ForeignKey(Company, on_delete=models.PROTECT, related_name="follow_ups")
     opportunity = models.ForeignKey(
         Opportunity,

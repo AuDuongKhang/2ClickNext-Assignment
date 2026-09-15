@@ -2,6 +2,7 @@ import csv
 import hashlib
 import json
 from dataclasses import dataclass
+from datetime import timezone as datetime_timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Callable
@@ -352,17 +353,232 @@ def _file_counts(data: ArchiveData, activity_accounted_rows: int) -> dict[str, d
     }
 
 
+def _follow_up_key(
+    *, company_id, opportunity_id, due_on, summary, created_at, author, status
+) -> tuple:
+    if created_at is not None and created_at.tzinfo is not None:
+        created_at = created_at.astimezone(datetime_timezone.utc)
+    return (
+        company_id,
+        opportunity_id,
+        due_on,
+        summary,
+        created_at,
+        author,
+        status,
+    )
+
+
+def _backfill_existing_provenance(data: ArchiveData) -> None:
+    """Fill provenance columns for domain rows imported before those columns existed."""
+    with transaction.atomic():
+        company_codes = {
+            _clean(row["company_code"])
+            for _, row in data.rows["companies_and_contacts.csv"]
+        }
+        company_map = Company.objects.in_bulk(company_codes, field_name="legacy_code")
+        contact_codes = [
+            _clean(row["contact_code"])
+            for _, row in data.rows["companies_and_contacts.csv"]
+        ]
+        contact_map = Contact.objects.in_bulk(contact_codes, field_name="legacy_code")
+        contact_updates = []
+        for row_number, row in data.rows["companies_and_contacts.csv"]:
+            contact_code = _clean(row["contact_code"])
+            contact = contact_map.get(contact_code)
+            if contact is None:
+                raise ArchiveValidationError(
+                    "companies_and_contacts.csv",
+                    row_number,
+                    f"cannot backfill missing contact {contact_code}",
+                )
+            legacy_row_id = _required(
+                row, "legacy_row_id", "companies_and_contacts.csv", row_number
+            )
+            if contact.legacy_row_id not in (None, legacy_row_id):
+                raise ArchiveValidationError(
+                    "companies_and_contacts.csv",
+                    row_number,
+                    f"contact {contact_code} has conflicting legacy row {contact.legacy_row_id}",
+                )
+            if contact.legacy_row_id is None:
+                contact.legacy_row_id = legacy_row_id
+                contact_updates.append(contact)
+        if contact_updates:
+            Contact.objects.bulk_update(
+                contact_updates, ["legacy_row_id"], batch_size=BATCH_SIZE
+            )
+
+        opportunity_codes = {
+            _clean(row["opportunity_code"])
+            for _, row in data.rows["opportunities.csv"]
+        }
+        opportunity_map = Opportunity.objects.in_bulk(
+            opportunity_codes, field_name="legacy_code"
+        )
+        activity_entry_ids = [
+            _clean(row["entry_id"])
+            for _, row in data.rows["activity_log.csv"]
+            if normalize_status(row["activity_type"]) != ActivityType.TASK
+        ]
+        activity_map = Activity.objects.in_bulk(
+            activity_entry_ids, field_name="legacy_code"
+        )
+        task_entry_ids = [
+            _required(row, "entry_id", "activity_log.csv", row_number)
+            for row_number, row in data.rows["activity_log.csv"]
+            if normalize_status(row["activity_type"]) == ActivityType.TASK
+        ]
+        existing_task_follow_ups = FollowUp.objects.in_bulk(
+            task_entry_ids, field_name="legacy_entry_id"
+        )
+        linked_activity_ids = set(
+            FollowUp.objects.filter(source_activity_id__in=[activity.pk for activity in activity_map.values()])
+            .values_list("source_activity_id", flat=True)
+        )
+        unlinked_follow_ups = list(
+            FollowUp.objects.filter(
+                legacy_entry_id__isnull=True,
+                source_activity__isnull=True,
+            )
+        )
+        candidates_by_key: dict[tuple, list[FollowUp]] = {}
+        for follow_up in unlinked_follow_ups:
+            candidates_by_key.setdefault(
+                _follow_up_key(
+                    company_id=follow_up.company_id,
+                    opportunity_id=follow_up.opportunity_id,
+                    due_on=follow_up.due_on,
+                    summary=follow_up.summary,
+                    created_at=follow_up.created_at,
+                    author=follow_up.author,
+                    status=follow_up.status,
+                ),
+                [],
+            ).append(follow_up)
+        for candidates in candidates_by_key.values():
+            candidates.sort(key=lambda follow_up: follow_up.pk)
+
+        pending_by_key: dict[tuple, list[tuple]] = {}
+        for row_number, row in data.rows["activity_log.csv"]:
+            activity_type = normalize_status(row["activity_type"])
+            entry_id = _clean(row["entry_id"])
+            company = company_map.get(_clean(row["company_code"]))
+            opportunity_code = _clean(row["opportunity_code"])
+            opportunity = opportunity_map.get(opportunity_code) if opportunity_code else None
+            occurred_at = parse_datetime(row["occurred_at"])
+            follow_up_on = parse_date(row["follow_up_on"])
+            author = _clean(row["legacy_author"])
+            status = (
+                FollowUpStatus.COMPLETED
+                if _clean(row["completion_marker"]) == "Y"
+                else FollowUpStatus.OPEN
+            )
+
+            if activity_type == ActivityType.TASK:
+                if entry_id in existing_task_follow_ups:
+                    continue
+                if company is None or (opportunity_code and opportunity is None):
+                    raise ArchiveValidationError(
+                        "activity_log.csv",
+                        row_number,
+                        f"cannot backfill task {entry_id}: relationship is missing",
+                    )
+                key = _follow_up_key(
+                    company_id=company.pk,
+                    opportunity_id=opportunity.pk if opportunity else None,
+                    due_on=follow_up_on,
+                    summary=row["details"],
+                    created_at=occurred_at,
+                    author=author,
+                    status=status,
+                )
+                pending_by_key.setdefault(key, []).append(
+                    (row_number, "task", entry_id, None)
+                )
+                continue
+
+            if follow_up_on is None:
+                continue
+            activity = activity_map.get(entry_id)
+            if activity is None:
+                raise ArchiveValidationError(
+                    "activity_log.csv",
+                    row_number,
+                    f"cannot backfill missing source activity {entry_id}",
+                )
+            if company is None or (opportunity_code and opportunity is None):
+                raise ArchiveValidationError(
+                    "activity_log.csv",
+                    row_number,
+                    f"cannot backfill source activity {entry_id}: relationship is missing",
+                )
+            if (
+                activity.company_id != company.pk
+                or activity.opportunity_id != (opportunity.pk if opportunity else None)
+            ):
+                raise ArchiveValidationError(
+                    "activity_log.csv",
+                    row_number,
+                    f"source activity {entry_id} does not match its archive relationship",
+                )
+            if activity.pk in linked_activity_ids:
+                continue
+            key = _follow_up_key(
+                company_id=company.pk,
+                opportunity_id=opportunity.pk if opportunity else None,
+                due_on=follow_up_on,
+                summary=row["details"],
+                created_at=occurred_at,
+                author=author,
+                status=FollowUpStatus.OPEN,
+            )
+            pending_by_key.setdefault(key, []).append(
+                (row_number, "derived", entry_id, activity)
+            )
+
+        follow_up_updates = []
+        for key, pending in pending_by_key.items():
+            candidates = candidates_by_key.pop(key, [])
+            if len(candidates) != len(pending):
+                row_number, kind, entry_id, _ = pending[0]
+                description = (
+                    f"imported task {entry_id}"
+                    if kind == "task"
+                    else f"derived follow-up for source activity {entry_id}"
+                )
+                raise ArchiveValidationError(
+                    "activity_log.csv",
+                    row_number,
+                    f"cannot match {description} for provenance",
+                )
+            for follow_up, (_, kind, entry_id, activity) in zip(candidates, pending):
+                if kind == "task":
+                    follow_up.legacy_entry_id = entry_id
+                else:
+                    follow_up.source_activity = activity
+                follow_up_updates.append(follow_up)
+
+        if follow_up_updates:
+            FollowUp.objects.bulk_update(
+                follow_up_updates,
+                ["legacy_entry_id", "source_activity"],
+                batch_size=BATCH_SIZE,
+            )
+
+
 def import_archive(archive_dir: Path) -> ImportBatch:
     """Validate and atomically import one manifest-defined legacy archive."""
     data = _load_archive(Path(archive_dir))
     dataset_version = str(data.manifest["dataset_version"]).strip()
     source_name = f"archive:{dataset_version}:{data.manifest_checksum}"
+    company_details = _validate_archive(data)
     existing = ImportBatch.objects.filter(
         source_name=source_name, source_checksum=data.manifest_checksum, status="completed"
     ).first()
     if existing is not None:
+        _backfill_existing_provenance(data)
         return existing
-    company_details = _validate_archive(data)
 
     try:
         with transaction.atomic():
@@ -371,6 +587,7 @@ def import_archive(archive_dir: Path) -> ImportBatch:
                 defaults={"source_checksum": data.manifest_checksum, "status": "importing"},
             )
             if not created and batch.status == "completed":
+                _backfill_existing_provenance(data)
                 return batch
             if not created:
                 batch.source_checksum = data.manifest_checksum
@@ -409,6 +626,7 @@ def import_archive(archive_dir: Path) -> ImportBatch:
             contact_objects = [
                 Contact(
                     legacy_code=_clean(row["contact_code"]),
+                    legacy_row_id=_clean(row["legacy_row_id"]),
                     company=company_map[_clean(row["company_code"])],
                     first_name=_clean(row["contact_first_name"]),
                     last_name=_clean(row["contact_last_name"]),
@@ -451,6 +669,7 @@ def import_archive(archive_dir: Path) -> ImportBatch:
 
             activity_objects: list[Activity] = []
             follow_up_objects: list[FollowUp] = []
+            derived_follow_up_rows: list[tuple[str, object, object, object, str, object, str]] = []
             activity_accounted_rows = 0
             for _, row in data.rows["activity_log.csv"]:
                 activity_type = normalize_status(row["activity_type"])
@@ -462,6 +681,7 @@ def import_archive(archive_dir: Path) -> ImportBatch:
                 if activity_type == ActivityType.TASK:
                     follow_up_objects.append(
                         FollowUp(
+                            legacy_entry_id=_clean(row["entry_id"]),
                             company=company,
                             opportunity=opportunity,
                             due_on=follow_up_on,
@@ -488,19 +708,43 @@ def import_archive(archive_dir: Path) -> ImportBatch:
                         )
                     )
                     if follow_up_on is not None:
-                        follow_up_objects.append(
-                            FollowUp(
-                                company=company,
-                                opportunity=opportunity,
-                                due_on=follow_up_on,
-                                summary=row["details"],
-                                created_at=occurred_at,
-                                author=_clean(row["legacy_author"]),
-                                status=FollowUpStatus.OPEN,
+                        derived_follow_up_rows.append(
+                            (
+                                _clean(row["entry_id"]),
+                                company,
+                                opportunity,
+                                follow_up_on,
+                                row["details"],
+                                occurred_at,
+                                _clean(row["legacy_author"]),
                             )
                         )
                 activity_accounted_rows += 1
             _bulk_create(Activity, activity_objects)
+            activity_map = {
+                activity.legacy_code: activity for activity in activity_objects
+            }
+            for (
+                entry_id,
+                company,
+                opportunity,
+                due_on,
+                summary,
+                created_at,
+                author,
+            ) in derived_follow_up_rows:
+                follow_up_objects.append(
+                    FollowUp(
+                        company=company,
+                        opportunity=opportunity,
+                        source_activity=activity_map[entry_id],
+                        due_on=due_on,
+                        summary=summary,
+                        created_at=created_at,
+                        author=author,
+                        status=FollowUpStatus.OPEN,
+                    )
+                )
             _bulk_create(FollowUp, follow_up_objects)
 
             batch.status = "completed"
@@ -513,5 +757,6 @@ def import_archive(archive_dir: Path) -> ImportBatch:
             source_name=source_name, source_checksum=data.manifest_checksum, status="completed"
         ).first()
         if completed is not None:
+            _backfill_existing_provenance(data)
             return completed
         raise

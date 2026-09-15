@@ -46,6 +46,8 @@ def run_handoff(opportunity: Opportunity) -> HandoffRun:
                 reason="The handoff roles could not complete.",
                 policy_version=POLICY_VERSION,
                 status="failed",
+                should_continue=False,
+                allowed_scope="none",
                 error_type=type(error).__name__,
                 error_message=SAFE_FAILURE_MESSAGE,
             )
@@ -60,4 +62,6 @@ def run_handoff(opportunity: Opportunity) -> HandoffRun:
             policy_version=POLICY_VERSION,
             status="completed",
             technical_readiness=decision.technical_readiness,
+            should_continue=decision.should_continue,
+            allowed_scope=decision.allowed_scope,
         )

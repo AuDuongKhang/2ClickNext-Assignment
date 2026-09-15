@@ -1,5 +1,6 @@
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
+from django.urls import reverse
 import pytest
 from django.utils import timezone
 
@@ -15,6 +16,17 @@ def test_company_detail_groups_opportunities_by_exact_fair_edition(client, compa
     assert response.status_code == 200
     assert response.context["company"] == company
     assert len(response.context["edition_groups"]) == 2
+
+
+@pytest.mark.django_db
+def test_company_detail_links_each_opportunity_to_its_workspace(client, company, opportunity):
+    response = client.get(f"/companies/{company.legacy_code}/")
+
+    assert response.status_code == 200
+    assert (
+        f'href="{reverse("opportunity-detail", args=[opportunity.legacy_code])}"'
+        in response.content.decode()
+    )
 
 
 @pytest.mark.django_db

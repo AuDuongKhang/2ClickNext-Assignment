@@ -58,11 +58,18 @@ def follow_up_new(request, legacy_code):
 
 
 def follow_up_list(request):
-    selected_filter, follow_ups = get_follow_up_inbox(request.GET.get("filter"))
+    selected_filter, page_obj = get_follow_up_inbox(
+        request.GET.get("filter"), request.GET.get("page", 1)
+    )
     return render(
         request,
         "activities/followup_list.html",
-        {"follow_ups": follow_ups, "selected_filter": selected_filter, "filters": FOLLOW_UP_FILTERS},
+        {
+            "follow_ups": page_obj,
+            "page_obj": page_obj,
+            "selected_filter": selected_filter,
+            "filters": FOLLOW_UP_FILTERS,
+        },
     )
 
 
