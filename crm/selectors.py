@@ -1,8 +1,9 @@
 from collections import OrderedDict
 from dataclasses import dataclass
 
+from django.contrib.postgres.lookups import TrigramSimilar
 from django.contrib.postgres.search import TrigramSimilarity
-from django.db.models import Case, IntegerField, Q, Value, When
+from django.db.models import Case, IntegerField, Prefetch, Q, Value, When
 from django.db.models.functions import Greatest
 
 from activities.models import Activity
@@ -60,18 +61,24 @@ def search_crm(query: str, page: int = 1) -> SearchResults:
             ),
             similarity=TrigramSimilarity("name", cleaned_query),
         )
-        .filter(Q(legacy_code__iexact=cleaned_query) | Q(similarity__gt=0.1))
+        .filter(Q(legacy_code__iexact=cleaned_query) | Q(name__trigram_similar=cleaned_query))
         .order_by("exact_match", "-similarity", "name", "legacy_code")[page_slice]
     )
     contact_matches = Q(legacy_code__iexact=cleaned_query)
+    contact_rank_cases = [When(legacy_code__iexact=cleaned_query, then=Value(0))]
     if normalized_phone:
         contact_matches |= Q(phone_search=normalized_phone)
+        contact_rank_cases.append(When(phone_search=normalized_phone, then=Value(1)))
+    fuzzy_contact_matches = (
+        Q(first_name__trigram_similar=cleaned_query)
+        | Q(last_name__trigram_similar=cleaned_query)
+        | Q(email__trigram_similar=cleaned_query)
+    )
     contacts = list(
         Contact.objects.select_related("company").annotate(
             exact_match=Case(
-                When(legacy_code__iexact=cleaned_query, then=Value(0)),
-                When(phone_search=normalized_phone, then=Value(0)),
-                default=Value(1),
+                *contact_rank_cases,
+                default=Value(2),
                 output_field=IntegerField(),
             ),
             similarity=Greatest(
@@ -80,7 +87,7 @@ def search_crm(query: str, page: int = 1) -> SearchResults:
                 TrigramSimilarity("email", cleaned_query),
             ),
         )
-        .filter(contact_matches | Q(similarity__gt=0.1))
+        .filter(contact_matches | fuzzy_contact_matches)
         .order_by("exact_match", "-similarity", "last_name", "first_name", "legacy_code")[page_slice]
     )
     return SearchResults(query=cleaned_query, page=page, companies=companies, contacts=contacts)
@@ -91,8 +98,10 @@ def get_company_workspace(legacy_code: str) -> CompanyWorkspace:
     company = (
         Company.objects.prefetch_related(
             "contacts",
-            "opportunities__primary_contact",
-            "opportunities__fair_edition",
+            Prefetch(
+                "opportunities",
+                queryset=Opportunity.objects.select_related("primary_contact", "fair_edition"),
+            ),
         )
         .filter(legacy_code=legacy_code)
         .first()

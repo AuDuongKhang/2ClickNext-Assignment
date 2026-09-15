@@ -3,6 +3,7 @@ from django.test.utils import CaptureQueriesContext
 import pytest
 
 from crm.models import Company, Contact
+from crm.selectors import search_crm
 
 
 @pytest.mark.django_db
@@ -36,6 +37,55 @@ def test_search_orders_exact_company_legacy_code_before_name_match(client):
     assert response.status_code == 200
     assert response.context["company_results"][0] == exact_match
     assert name_match in response.context["company_results"]
+
+
+@pytest.mark.django_db
+def test_search_uses_postgresql_trigram_similarity_operators_for_fuzzy_candidates():
+    Company.objects.create(legacy_code="CO-FUZZY", name="Acme Exhibitions")
+
+    with CaptureQueriesContext(connection) as queries:
+        search_crm("Acme")
+
+    search_queries = [query["sql"] for query in queries if "crm_company" in query["sql"]]
+    assert any(" % " in query for query in search_queries)
+
+
+@pytest.mark.django_db
+def test_search_ranks_legacy_code_then_phone_then_fuzzy_contact_matches(client):
+    legacy_match = Contact.objects.create(
+        legacy_code="LEAD-001", company=Company.objects.create(legacy_code="CO-LEGACY", name="Legacy"),
+        first_name="Zoe", last_name="Zulu",
+    )
+    phone_match = Contact.objects.create(
+        legacy_code="AAA-PHONE", company=Company.objects.create(legacy_code="CO-PHONE", name="Phone"),
+        first_name="Yara", last_name="Yellow", phone="001",
+    )
+    fuzzy_match = Contact.objects.create(
+        legacy_code="ZZZ-FUZZY", company=Company.objects.create(legacy_code="CO-FUZZY", name="Fuzzy"),
+        first_name="LEAD-001", last_name="Alpha",
+    )
+
+    response = client.get("/search/", {"q": "LEAD-001"})
+
+    assert response.status_code == 200
+    assert response.context["contact_results"][:3] == [legacy_match, phone_match, fuzzy_match]
+
+
+@pytest.mark.django_db
+def test_search_does_not_rank_blank_phone_as_a_match_for_text_queries(client):
+    legacy_match = Contact.objects.create(
+        legacy_code="Searchable", company=Company.objects.create(legacy_code="CO-LEGACY", name="Legacy"),
+        first_name="Zoe", last_name="Zulu",
+    )
+    fuzzy_match = Contact.objects.create(
+        legacy_code="AAA-FUZZY", company=Company.objects.create(legacy_code="CO-FUZZY", name="Fuzzy"),
+        first_name="Searchable", last_name="Alpha",
+    )
+
+    response = client.get("/search/", {"q": "Searchable"})
+
+    assert response.status_code == 200
+    assert response.context["contact_results"][:2] == [legacy_match, fuzzy_match]
 
 
 @pytest.mark.django_db

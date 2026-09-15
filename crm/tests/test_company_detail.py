@@ -4,6 +4,7 @@ import pytest
 from django.utils import timezone
 
 from activities.models import Activity
+from crm.models import Contact
 from opportunities.models import Opportunity
 
 
@@ -62,10 +63,17 @@ def test_company_detail_does_not_leak_another_companies_opportunity_activity(
 @pytest.mark.django_db
 def test_company_detail_uses_fixed_query_count_for_many_opportunities(client, company, fair_edition):
     for number in range(30):
+        primary_contact = Contact.objects.create(
+            legacy_code=f"CT-{number}",
+            company=company,
+            first_name="Primary",
+            last_name=str(number),
+        )
         opportunity = Opportunity.objects.create(
             legacy_code=f"OP-{number}",
             company=company,
             fair_edition=fair_edition,
+            primary_contact=primary_contact,
             description=f"Stand {number}",
             sales_stage="open",
         )
@@ -84,4 +92,5 @@ def test_company_detail_uses_fixed_query_count_for_many_opportunities(client, co
 
     assert response.status_code == 200
     assert len(response.context["opportunity_activities"]) == 30
+    assert response.context["edition_groups"][0].opportunities[0].primary_contact.full_name
     assert len(queries) <= 6
