@@ -12,6 +12,7 @@ main, .messages { padding: 1.5rem 1rem; }
 section { margin-block: 1.5rem; }
 a { color: #075985; }
 .site-header a { color: #fff; }
+.site-header a[aria-current="page"] { font-weight: 700; text-decoration: underline; text-underline-offset: .25rem; }
 a:focus-visible, input:focus-visible, button:focus-visible { outline: 3px solid #f59e0b; outline-offset: 3px; }
 .skip-link { position: absolute; left: -999px; top: .5rem; padding: .5rem; background: #fff; color: #172033; }
 .skip-link:focus { left: .5rem; z-index: 1; }
@@ -20,3 +21,26 @@ a:focus-visible, input:focus-visible, button:focus-visible { outline: 3px solid 
 .company-details { display: grid; grid-template-columns: max-content 1fr; gap: .25rem 1rem; }
 .company-details dt { font-weight: 700; }
 .company-details dd { margin: 0; }
+.page-heading, .section-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; flex-wrap: wrap; }
+.page-heading h1, .section-heading h2, .section-heading h3 { margin-bottom: 0; }
+.button-link { display: inline-block; padding: .45rem .6rem; color: #fff; background: #126782; border: 1px solid #0d4d61; border-radius: .2rem; text-decoration: none; }
+.dashboard-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(18rem, 1fr); gap: 1.5rem; align-items: start; }
+.dashboard-panel { margin: 0; padding: 1rem; background: #fff; border: 1px solid #d9e2ec; border-radius: .3rem; }
+.due-groups { display: grid; gap: 1.5rem; }
+table { width: 100%; border-collapse: collapse; }
+caption { padding: .5rem 0; color: #52606d; text-align: left; }
+th, td { padding: .6rem; border-bottom: 1px solid #d9e2ec; text-align: left; vertical-align: top; }
+th { color: #243b53; background: #f0f4f8; }
+.status-badge { display: inline-block; padding: .15rem .45rem; border-radius: 999px; font-size: .85rem; font-weight: 700; white-space: nowrap; }
+.status-overdue, .status-lost { color: #8a1c1c; background: #ffe3e3; }
+.status-today, .status-proposal { color: #7c4300; background: #fff3bf; }
+.status-upcoming, .status-open { color: #075985; background: #d9f0ff; }
+.status-qualified, .status-won { color: #0b5d1e; background: #d3f9d8; }
+.errorlist { margin: .25rem 0; padding-left: 1.25rem; color: #b42318; font-weight: 700; }
+input[aria-invalid="true"], select[aria-invalid="true"], textarea[aria-invalid="true"] { border: 2px solid #b42318; }
+
+@media (max-width: 48rem) {
+  .dashboard-grid { grid-template-columns: 1fr; }
+  .dashboard-panel { overflow-x: auto; }
+  nav form { flex-basis: 100%; }
+}

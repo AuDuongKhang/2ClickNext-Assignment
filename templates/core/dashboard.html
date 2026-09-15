@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard · Exhibition CRM{% endblock %}
+
+{% block content %}
+  <div class="page-heading">
+    <div>
+      <h1>Sales dashboard</h1>
+      <p>Prioritize open follow-ups and continue active opportunities.</p>
+    </div>
+    <a class="button-link" href="{% url 'follow-up-list' %}">Open follow-up inbox</a>
+  </div>
+
+  <div class="dashboard-grid">
+    <section class="dashboard-panel" aria-labelledby="due-work-heading">
+      <h2 id="due-work-heading">Due work</h2>
+      <div class="due-groups">
+        <section aria-labelledby="overdue-heading">
+          <div class="section-heading">
+            <h3 id="overdue-heading">Overdue</h3>
+            <a href="{% url 'follow-up-list' %}?filter=overdue">View all overdue follow-ups</a>
+          </div>
+          <table>
+            <caption>Open follow-ups due before today</caption>
+            <thead><tr><th scope="col">Follow-up</th><th scope="col">Company</th><th scope="col">Due</th></tr></thead>
+            <tbody>
+              {% for follow_up in overdue %}
+                <tr><td><a href="{% url 'follow-up-list' %}?filter=overdue">{{ follow_up.summary }}</a></td><td>{{ follow_up.company.name }}</td><td><span class="status-badge status-overdue"><time datetime="{{ follow_up.due_on|date:'Y-m-d' }}">{{ follow_up.due_on|date:"d/m/Y" }}</time></span></td></tr>
+              {% empty %}
+                <tr><td colspan="3">No overdue follow-ups.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </section>
+
+        <section aria-labelledby="today-heading">
+          <div class="section-heading">
+            <h3 id="today-heading">Today</h3>
+            <a href="{% url 'follow-up-list' %}?filter=today">View all follow-ups due today</a>
+          </div>
+          <table>
+            <caption>Open follow-ups due today</caption>
+            <thead><tr><th scope="col">Follow-up</th><th scope="col">Company</th><th scope="col">Status</th></tr></thead>
+            <tbody>
+              {% for follow_up in today %}
+                <tr><td><a href="{% url 'follow-up-list' %}?filter=today">{{ follow_up.summary }}</a></td><td>{{ follow_up.company.name }}</td><td><span class="status-badge status-today">Due today</span></td></tr>
+              {% empty %}
+                <tr><td colspan="3">No follow-ups due today.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </section>
+
+        <section aria-labelledby="upcoming-heading">
+          <div class="section-heading">
+            <h3 id="upcoming-heading">Upcoming</h3>
+            <a href="{% url 'follow-up-list' %}?filter=upcoming">View all upcoming follow-ups</a>
+          </div>
+          <table>
+            <caption>Open follow-ups due after today</caption>
+            <thead><tr><th scope="col">Follow-up</th><th scope="col">Company</th><th scope="col">Due</th></tr></thead>
+            <tbody>
+              {% for follow_up in upcoming %}
+                <tr><td><a href="{% url 'follow-up-list' %}?filter=upcoming">{{ follow_up.summary }}</a></td><td>{{ follow_up.company.name }}</td><td><span class="status-badge status-upcoming"><time datetime="{{ follow_up.due_on|date:'Y-m-d' }}">{{ follow_up.due_on|date:"d/m/Y" }}</time></span></td></tr>
+              {% empty %}
+                <tr><td colspan="3">No upcoming follow-ups.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </section>
+      </div>
+    </section>
+
+    <section class="dashboard-panel" aria-labelledby="recent-opportunities-heading">
+      <div class="section-heading">
+        <h2 id="recent-opportunities-heading">Recent opportunities</h2>
+        <a href="{% url 'search' %}">Search CRM</a>
+      </div>
+      <table>
+        <caption>Most recently added opportunities</caption>
+        <thead><tr><th scope="col">Opportunity</th><th scope="col">Company</th><th scope="col">Stage</th></tr></thead>
+        <tbody>
+          {% for opportunity in recent_opportunities %}
+            <tr><td><a href="{% url 'opportunity-detail' opportunity.legacy_code %}">{{ opportunity.legacy_code }}</a><br><small>{{ opportunity.description }}</small></td><td>{{ opportunity.company.name }}</td><td><span class="status-badge status-{{ opportunity.sales_stage }}">{{ opportunity.get_sales_stage_display }}</span></td></tr>
+          {% empty %}
+            <tr><td colspan="3">No opportunities recorded.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+  </div>
+{% endblock %}

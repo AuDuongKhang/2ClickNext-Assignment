@@ -11,7 +11,9 @@
   <a class="skip-link" href="#main-content">Skip to main content</a>
   <header class="site-header">
     <nav aria-label="Primary navigation">
-      <a class="brand" href="{% url 'search' %}">Exhibition CRM</a>
+      <a class="brand" href="{% url 'dashboard' %}">Exhibition CRM</a>
+      <a href="{% url 'dashboard' %}"{% if request.resolver_match.url_name == 'dashboard' %} aria-current="page"{% endif %}>Dashboard</a>
+      <a href="{% url 'follow-up-list' %}"{% if request.resolver_match.url_name == 'follow-up-list' %} aria-current="page"{% endif %}>Follow-up inbox</a>
       <form action="{% url 'search' %}" method="get" role="search">
         <label for="global-search">Search companies and contacts</label>
         <input id="global-search" name="q" type="search" value="{{ query|default:'' }}">
@@ -20,7 +22,7 @@
     </nav>
   </header>
   {% if messages %}
-    <section class="messages" aria-label="Messages">
+    <section class="messages" aria-label="Messages" aria-live="polite">
       {% for message in messages %}<p>{{ message }}</p>{% endfor %}
     </section>
   {% endif %}
