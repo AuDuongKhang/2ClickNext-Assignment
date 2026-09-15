@@ -1,4 +1,4 @@
-"""Opt-in PostgreSQL query-plan coverage for archive-scale CRM search data."""
+"""PostgreSQL query-plan coverage for archive-scale CRM search data."""
 
 import json
 from datetime import date, datetime, timezone
@@ -41,6 +41,7 @@ def _plan_node_types(plan):
 def _assert_index_plan(queryset, label):
     plan = json.loads(queryset.explain(format="JSON"))[0]["Plan"]
     node_types = list(_plan_node_types(plan))
+    print(f"{label} plan nodes: {node_types}")
     assert "Seq Scan" not in node_types, f"{label} used a sequential scan: {node_types}"
     assert any("Index" in node_type for node_type in node_types), (
         f"{label} did not use an index node: {node_types}"
@@ -65,34 +66,26 @@ def _time_application_search(query, label, expected_company_code=None, expected_
 
 
 def _production_search_querysets(query):
-    """Mirror search_crm's result querysets for EXPLAIN without materializing them.
-
-    The generated legacy codes are canonical uppercase values. The real search
-    call below uses the selector's case-insensitive lookup; the companion plan
-    uses the equivalent canonical equality so PostgreSQL can use the shipped
-    unique B-tree index without inventing a functional index that production
-    does not have.
-    """
+    """Mirror search_crm's result querysets for EXPLAIN without materializing them."""
     cleaned_query = query.strip()
     normalized_phone = normalize_phone(cleaned_query)
-    canonical_legacy_query = cleaned_query.upper()
     page_slice = slice(0, PAGE_SIZE)
 
     company_queryset = (
         Company.objects.annotate(
             exact_match=Case(
-                When(legacy_code=canonical_legacy_query, then=Value(0)),
+                When(legacy_code__iexact=cleaned_query, then=Value(0)),
                 default=Value(1),
                 output_field=IntegerField(),
             ),
             similarity=TrigramSimilarity("name", cleaned_query),
         )
-        .filter(Q(legacy_code=canonical_legacy_query) | Q(name__trigram_similar=cleaned_query))
+        .filter(Q(legacy_code__iexact=cleaned_query) | Q(name__trigram_similar=cleaned_query))
         .order_by("exact_match", "-similarity", "name", "legacy_code")[page_slice]
     )
 
-    contact_matches = Q(legacy_code=canonical_legacy_query)
-    contact_rank_cases = [When(legacy_code=canonical_legacy_query, then=Value(0))]
+    contact_matches = Q(legacy_code__iexact=cleaned_query)
+    contact_rank_cases = [When(legacy_code__iexact=cleaned_query, then=Value(0))]
     if normalized_phone:
         contact_matches |= Q(phone_search=normalized_phone)
         contact_rank_cases.append(When(phone_search=normalized_phone, then=Value(1)))
@@ -194,6 +187,8 @@ def _create_archive_scale_fixture():
         ],
     )
     with connection.cursor() as cursor:
+        # Django renders __iexact as UPPER(column) = UPPER(value). The
+        # matching expression indexes are created by the CRM migration.
         cursor.execute("ANALYZE crm_company")
         cursor.execute("ANALYZE crm_contact")
         cursor.execute("ANALYZE opportunities_opportunity")

@@ -1,5 +1,6 @@
 from django.contrib.postgres.indexes import GinIndex
 from django.db import models
+from django.db.models.functions import Upper
 
 
 def normalize_phone(value: str) -> str:
@@ -18,6 +19,7 @@ class Company(models.Model):
         indexes = [
             models.Index(fields=["name"]),
             GinIndex(fields=["name"], name="company_name_trgm", opclasses=["gin_trgm_ops"]),
+            models.Index(Upper("legacy_code"), name="company_legacy_upper_idx"),
         ]
 
     def __str__(self):
@@ -41,6 +43,7 @@ class Contact(models.Model):
             GinIndex(fields=["last_name"], name="contact_last_trgm", opclasses=["gin_trgm_ops"]),
             GinIndex(fields=["email"], name="contact_email_trgm", opclasses=["gin_trgm_ops"]),
             models.Index(fields=["phone_search"], name="contact_phone_search_idx"),
+            models.Index(Upper("legacy_code"), name="contact_legacy_upper_idx"),
         ]
 
     def save(self, *args, **kwargs):
