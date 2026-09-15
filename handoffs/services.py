@@ -14,11 +14,7 @@ from .roles import check_brief, prepare_brief
 from .snapshot import build_snapshot
 
 
-def _safe_error_message(error: Exception) -> str:
-    message = str(error).splitlines()[0] if str(error) else "Unexpected role failure."
-    if "traceback" in message.lower():
-        return "Unexpected role failure."
-    return message
+SAFE_FAILURE_MESSAGE = "A handoff role failed before completion."
 
 
 def run_handoff(opportunity: Opportunity) -> HandoffRun:
@@ -31,28 +27,34 @@ def run_handoff(opportunity: Opportunity) -> HandoffRun:
         )
         snapshot = build_snapshot(loaded_opportunity)
         snapshot_data = snapshot.to_dict()
+        preparer_output = ""
+        reviewer_output = ""
 
         try:
             draft = prepare_brief(snapshot)
+            preparer_output = json.dumps(draft.to_dict(), sort_keys=True)
             check = check_brief(draft, snapshot)
+            reviewer_output = json.dumps(check.to_dict(), sort_keys=True)
             decision = decide_handoff(draft, check)
         except Exception as error:
             return HandoffRun.objects.create(
                 opportunity=loaded_opportunity,
                 snapshot=snapshot_data,
+                preparer_output=preparer_output,
+                reviewer_output=reviewer_output,
                 decision="failed",
                 reason="The handoff roles could not complete.",
                 policy_version=POLICY_VERSION,
                 status="failed",
                 error_type=type(error).__name__,
-                error_message=_safe_error_message(error),
+                error_message=SAFE_FAILURE_MESSAGE,
             )
 
         return HandoffRun.objects.create(
             opportunity=loaded_opportunity,
             snapshot=snapshot_data,
-            preparer_output=json.dumps(draft.to_dict(), sort_keys=True),
-            reviewer_output=json.dumps(check.to_dict(), sort_keys=True),
+            preparer_output=preparer_output,
+            reviewer_output=reviewer_output,
             decision=decision.code,
             reason=decision.reason,
             policy_version=POLICY_VERSION,
