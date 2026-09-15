@@ -1,28 +1,23 @@
 """Opt-in PostgreSQL query-plan coverage for archive-scale CRM search data."""
 
 import json
-import os
 from datetime import date, datetime, timezone
 from time import perf_counter
 
 import pytest
+from django.contrib.postgres.search import TrigramSimilarity
 from django.db import connection
+from django.db.models import Case, IntegerField, Q, Value, When
+from django.db.models.functions import Greatest
 
 from activities.models import Activity
-from crm.models import Company, Contact
+from crm.models import Company, Contact, normalize_phone
 from fairs.models import FairEdition
 from opportunities.models import Opportunity
+from crm.selectors import PAGE_SIZE, search_crm
 
 
-RUN_PERFORMANCE_TESTS = os.environ.get("RUN_SEARCH_PERFORMANCE") == "1"
-
-pytestmark = [
-    pytest.mark.skipif(
-        not RUN_PERFORMANCE_TESTS,
-        reason="set RUN_SEARCH_PERFORMANCE=1 to generate the archive-scale performance fixtures",
-    ),
-    pytest.mark.django_db(transaction=True),
-]
+pytestmark = pytest.mark.django_db(transaction=True)
 
 
 COMPANY_COUNT = 50_000
@@ -52,11 +47,78 @@ def _assert_index_plan(queryset, label):
     )
 
 
-def _time_search(queryset, label):
+def _time_application_search(query, label, expected_company_code=None, expected_contact_code=None):
     started_at = perf_counter()
-    list(queryset[:25])
+    results = search_crm(query)
     elapsed_ms = (perf_counter() - started_at) * 1_000
-    print(f"{label}: {elapsed_ms:.2f} ms (500 ms is a manual-review target)")
+    company_codes = {company.legacy_code for company in results.companies}
+    contact_codes = {contact.legacy_code for contact in results.contacts}
+    if expected_company_code is not None:
+        assert expected_company_code in company_codes
+    if expected_contact_code is not None:
+        assert expected_contact_code in contact_codes
+    print(
+        f"{label}: {elapsed_ms:.2f} ms; "
+        f"companies={len(results.companies)}, contacts={len(results.contacts)} "
+        "(500 ms is a manual-review target)"
+    )
+
+
+def _production_search_querysets(query):
+    """Mirror search_crm's result querysets for EXPLAIN without materializing them.
+
+    The generated legacy codes are canonical uppercase values. The real search
+    call below uses the selector's case-insensitive lookup; the companion plan
+    uses the equivalent canonical equality so PostgreSQL can use the shipped
+    unique B-tree index without inventing a functional index that production
+    does not have.
+    """
+    cleaned_query = query.strip()
+    normalized_phone = normalize_phone(cleaned_query)
+    canonical_legacy_query = cleaned_query.upper()
+    page_slice = slice(0, PAGE_SIZE)
+
+    company_queryset = (
+        Company.objects.annotate(
+            exact_match=Case(
+                When(legacy_code=canonical_legacy_query, then=Value(0)),
+                default=Value(1),
+                output_field=IntegerField(),
+            ),
+            similarity=TrigramSimilarity("name", cleaned_query),
+        )
+        .filter(Q(legacy_code=canonical_legacy_query) | Q(name__trigram_similar=cleaned_query))
+        .order_by("exact_match", "-similarity", "name", "legacy_code")[page_slice]
+    )
+
+    contact_matches = Q(legacy_code=canonical_legacy_query)
+    contact_rank_cases = [When(legacy_code=canonical_legacy_query, then=Value(0))]
+    if normalized_phone:
+        contact_matches |= Q(phone_search=normalized_phone)
+        contact_rank_cases.append(When(phone_search=normalized_phone, then=Value(1)))
+    fuzzy_contact_matches = (
+        Q(first_name__trigram_similar=cleaned_query)
+        | Q(last_name__trigram_similar=cleaned_query)
+        | Q(email__trigram_similar=cleaned_query)
+    )
+    contact_queryset = (
+        Contact.objects.select_related("company")
+        .annotate(
+            exact_match=Case(
+                *contact_rank_cases,
+                default=Value(2),
+                output_field=IntegerField(),
+            ),
+            similarity=Greatest(
+                TrigramSimilarity("first_name", cleaned_query),
+                TrigramSimilarity("last_name", cleaned_query),
+                TrigramSimilarity("email", cleaned_query),
+            ),
+        )
+        .filter(contact_matches | fuzzy_contact_matches)
+        .order_by("exact_match", "-similarity", "last_name", "first_name", "legacy_code")[page_slice]
+    )
+    return company_queryset, contact_queryset
 
 
 def _create_archive_scale_fixture():
@@ -138,16 +200,18 @@ def _create_archive_scale_fixture():
         cursor.execute("ANALYZE activities_activity")
 
 
-def test_archive_scale_searches_use_postgresql_indexes():
+def test_archive_scale_searches_use_production_query_plans_and_timings():
     _create_archive_scale_fixture()
 
     searches = {
-        "company-name": Company.objects.filter(name__trigram_similar="Search Plan Company"),
-        "contact-name": Contact.objects.filter(first_name__trigram_similar="Search Plan Contact"),
-        "email": Contact.objects.filter(email__trigram_similar="search-plan-contact@example.test"),
-        "phone": Contact.objects.filter(phone_search="442079460958"),
-        "legacy-code": Contact.objects.filter(legacy_code="PERF-CONTACT-000000"),
+        "company-name": ("Search Plan Company", "PERF-COMPANY-000000", None),
+        "contact-name": ("Search Plan Contact", None, "PERF-CONTACT-000000"),
+        "email": ("search-plan-contact@example.test", None, "PERF-CONTACT-000000"),
+        "phone": ("+44 20 7946 0958", None, "PERF-CONTACT-000000"),
+        "legacy-code": ("perf-contact-000000", None, "PERF-CONTACT-000000"),
     }
-    for label, queryset in searches.items():
-        _assert_index_plan(queryset, label)
-        _time_search(queryset, label)
+    for label, (query, expected_company_code, expected_contact_code) in searches.items():
+        company_queryset, contact_queryset = _production_search_querysets(query)
+        _assert_index_plan(company_queryset, f"{label} company branch")
+        _assert_index_plan(contact_queryset, f"{label} contact branch")
+        _time_application_search(query, label, expected_company_code, expected_contact_code)
