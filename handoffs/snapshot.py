@@ -4,12 +4,35 @@ from __future__ import annotations
 
 from typing import Iterable
 
-from .types import JsonValue, OpportunitySnapshot, _json_safe
+from .types import OpportunitySnapshot, _json_safe
+
+
+RECENT_ACTIVITY_LIMIT = 50
 
 
 def _items(related: object) -> Iterable[object]:
     all_items = getattr(related, "all", None)
     return all_items() if callable(all_items) else related  # type: ignore[return-value]
+
+
+def _recent_activities(opportunity: object) -> Iterable[object]:
+    related = getattr(opportunity, "activities", ())
+    all_items = getattr(related, "all", None)
+    if callable(all_items):
+        items = all_items()
+        order_by = getattr(items, "order_by", None)
+        if callable(order_by):
+            return order_by("-occurred_at", "-pk")[:RECENT_ACTIVITY_LIMIT]
+    else:
+        items = related
+    return sorted(
+        (activity for activity in items if _belongs_to(opportunity, activity)),
+        key=lambda activity: (
+            getattr(activity, "occurred_at", None),
+            getattr(activity, "pk", 0) or 0,
+        ),
+        reverse=True,
+    )[:RECENT_ACTIVITY_LIMIT]
 
 
 def _belongs_to(opportunity: object, record: object) -> bool:
@@ -31,7 +54,7 @@ def build_snapshot(opportunity: object) -> OpportunitySnapshot:
             "details": getattr(activity, "details", ""),
             "author": getattr(activity, "author", ""),
         }
-        for activity in _items(getattr(opportunity, "activities", ()))
+        for activity in _recent_activities(opportunity)
         if _belongs_to(opportunity, activity)
     ]
     follow_ups = [
