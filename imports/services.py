@@ -527,9 +527,6 @@ def _backfill_existing_provenance(data: ArchiveData) -> None:
                 (row_number, "derived", entry_id, activity)
             )
 
-        for pending in pending_by_key.values():
-            pending.sort(key=lambda item: (item[1] != "task", item[0]))
-
         follow_up_updates = []
         for key, pending in pending_by_key.items():
             candidates = candidates_by_key.pop(key, [])
@@ -662,7 +659,7 @@ def import_archive(archive_dir: Path) -> ImportBatch:
 
             activity_objects: list[Activity] = []
             follow_up_objects: list[FollowUp] = []
-            derived_follow_up_rows: list[tuple[str, object, object, object, str, object, str]] = []
+            follow_up_rows: list[tuple[dict[str, str], object, object, object, object, str]] = []
             activity_accounted_rows = 0
             for _, row in data.rows["activity_log.csv"]:
                 activity_type = normalize_status(row["activity_type"])
@@ -672,19 +669,8 @@ def import_archive(archive_dir: Path) -> ImportBatch:
                 marker = _clean(row["completion_marker"])
                 company = company_map[_clean(row["company_code"])]
                 if activity_type == ActivityType.TASK:
-                    follow_up_objects.append(
-                        FollowUp(
-                            legacy_entry_id=_clean(row["entry_id"]),
-                            company=company,
-                            opportunity=opportunity,
-                            due_on=follow_up_on,
-                            summary=row["details"],
-                            created_at=occurred_at,
-                            author=_clean(row["legacy_author"]),
-                            status=(
-                                FollowUpStatus.COMPLETED if marker == "Y" else FollowUpStatus.OPEN
-                            ),
-                        )
+                    follow_up_rows.append(
+                        (row, company, opportunity, occurred_at, follow_up_on, marker)
                     )
                 else:
                     activity_objects.append(
@@ -701,41 +687,36 @@ def import_archive(archive_dir: Path) -> ImportBatch:
                         )
                     )
                     if follow_up_on is not None:
-                        derived_follow_up_rows.append(
-                            (
-                                _clean(row["entry_id"]),
-                                company,
-                                opportunity,
-                                follow_up_on,
-                                row["details"],
-                                occurred_at,
-                                _clean(row["legacy_author"]),
-                            )
+                        follow_up_rows.append(
+                            (row, company, opportunity, occurred_at, follow_up_on, marker)
                         )
                 activity_accounted_rows += 1
             _bulk_create(Activity, activity_objects)
             activity_map = {
                 activity.legacy_code: activity for activity in activity_objects
             }
-            for (
-                entry_id,
-                company,
-                opportunity,
-                due_on,
-                summary,
-                created_at,
-                author,
-            ) in derived_follow_up_rows:
+            for row, company, opportunity, occurred_at, follow_up_on, marker in follow_up_rows:
+                activity_type = normalize_status(row["activity_type"])
+                entry_id = _clean(row["entry_id"])
                 follow_up_objects.append(
                     FollowUp(
+                        legacy_entry_id=entry_id if activity_type == ActivityType.TASK else None,
                         company=company,
                         opportunity=opportunity,
-                        source_activity=activity_map[entry_id],
-                        due_on=due_on,
-                        summary=summary,
-                        created_at=created_at,
-                        author=author,
-                        status=FollowUpStatus.OPEN,
+                        source_activity=(
+                            None
+                            if activity_type == ActivityType.TASK
+                            else activity_map[entry_id]
+                        ),
+                        due_on=follow_up_on,
+                        summary=row["details"],
+                        created_at=occurred_at,
+                        author=_clean(row["legacy_author"]),
+                        status=(
+                            FollowUpStatus.COMPLETED
+                            if activity_type == ActivityType.TASK and marker == "Y"
+                            else FollowUpStatus.OPEN
+                        ),
                     )
                 )
             _bulk_create(FollowUp, follow_up_objects)

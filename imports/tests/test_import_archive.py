@@ -151,6 +151,49 @@ def test_import_reconciles_provenance_after_user_completes_open_task():
 
 
 @pytest.mark.django_db(transaction=True)
+def test_import_reconciles_colliding_task_and_derived_follow_up_in_archive_order(tmp_path):
+    archive = tmp_path / "archive"
+    archive.mkdir()
+    for source in ARCHIVE.iterdir():
+        (archive / source.name).write_bytes(source.read_bytes())
+
+    activities = archive / "activity_log.csv"
+    original_task_row = (
+        "AC-003;CO-001;OP-001;task;26/08/2026 09:00;Send updated height proposal;"
+        "06/09/2026;N;j.chen"
+    )
+    colliding_task_row = (
+        "AC-003;CO-001;OP-001;task;25/08/2026 10:30;Confirmed requested height and plot;"
+        "05/09/2026;N;a.morgan"
+    )
+    source = activities.read_text(encoding="utf-8")
+    assert source.count(original_task_row) == 1
+    activities.write_text(source.replace(original_task_row, colliding_task_row), encoding="utf-8")
+    update_fixture_checksum(archive, "activity_log.csv")
+
+    first = import_archive(archive)
+    assert list(
+        FollowUp.objects.filter(summary="Confirmed requested height and plot")
+        .order_by("pk")
+        .values_list("legacy_entry_id", "source_activity__legacy_code")
+    ) == [(None, "AC-001"), ("AC-003", None)]
+    task = FollowUp.objects.get(legacy_entry_id="AC-003")
+    derived = FollowUp.objects.get(source_activity__legacy_code="AC-001")
+    FollowUp.objects.update(legacy_entry_id=None, source_activity=None)
+
+    reconciled = import_archive(archive)
+    repeated = import_archive(archive)
+
+    assert reconciled.pk == first.pk == repeated.pk
+    assert Company.objects.count() == 2
+    assert Contact.objects.count() == 3
+    assert Activity.objects.count() == 3
+    assert FollowUp.objects.count() == 5
+    assert FollowUp.objects.get(pk=task.pk).legacy_entry_id == "AC-003"
+    assert FollowUp.objects.get(pk=derived.pk).source_activity.legacy_code == "AC-001"
+
+
+@pytest.mark.django_db(transaction=True)
 def test_import_rolls_back_entire_batch_when_a_reference_is_broken(tmp_path):
     """Moving writes outside the transaction would leave partial data after a bad row."""
     archive = tmp_path / "archive"
