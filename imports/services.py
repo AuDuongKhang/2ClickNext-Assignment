@@ -354,7 +354,7 @@ def _file_counts(data: ArchiveData, activity_accounted_rows: int) -> dict[str, d
 
 
 def _follow_up_key(
-    *, company_id, opportunity_id, due_on, summary, created_at, author, status
+    *, company_id, opportunity_id, due_on, summary, created_at, author
 ) -> tuple:
     if created_at is not None and created_at.tzinfo is not None:
         created_at = created_at.astimezone(datetime_timezone.utc)
@@ -365,7 +365,6 @@ def _follow_up_key(
         summary,
         created_at,
         author,
-        status,
     )
 
 
@@ -452,7 +451,6 @@ def _backfill_existing_provenance(data: ArchiveData) -> None:
                     summary=follow_up.summary,
                     created_at=follow_up.created_at,
                     author=follow_up.author,
-                    status=follow_up.status,
                 ),
                 [],
             ).append(follow_up)
@@ -469,12 +467,6 @@ def _backfill_existing_provenance(data: ArchiveData) -> None:
             occurred_at = parse_datetime(row["occurred_at"])
             follow_up_on = parse_date(row["follow_up_on"])
             author = _clean(row["legacy_author"])
-            status = (
-                FollowUpStatus.COMPLETED
-                if _clean(row["completion_marker"]) == "Y"
-                else FollowUpStatus.OPEN
-            )
-
             if activity_type == ActivityType.TASK:
                 if entry_id in existing_task_follow_ups:
                     continue
@@ -491,7 +483,6 @@ def _backfill_existing_provenance(data: ArchiveData) -> None:
                     summary=row["details"],
                     created_at=occurred_at,
                     author=author,
-                    status=status,
                 )
                 pending_by_key.setdefault(key, []).append(
                     (row_number, "task", entry_id, None)
@@ -531,11 +522,13 @@ def _backfill_existing_provenance(data: ArchiveData) -> None:
                 summary=row["details"],
                 created_at=occurred_at,
                 author=author,
-                status=FollowUpStatus.OPEN,
             )
             pending_by_key.setdefault(key, []).append(
                 (row_number, "derived", entry_id, activity)
             )
+
+        for pending in pending_by_key.values():
+            pending.sort(key=lambda item: (item[1] != "task", item[0]))
 
         follow_up_updates = []
         for key, pending in pending_by_key.items():

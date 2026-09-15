@@ -126,6 +126,31 @@ def test_import_reconciles_provenance_for_an_already_imported_batch():
 
 
 @pytest.mark.django_db(transaction=True)
+def test_import_reconciles_provenance_after_user_completes_open_task():
+    first = import_archive(ARCHIVE)
+
+    task = FollowUp.objects.get(summary="Send updated height proposal")
+    task.status = "completed"
+    task.save(update_fields=["status"])
+    Contact.objects.update(legacy_row_id=None)
+    FollowUp.objects.update(legacy_entry_id=None, source_activity=None)
+
+    reconciled = import_archive(ARCHIVE)
+    repeated = import_archive(ARCHIVE)
+
+    assert reconciled.pk == first.pk == repeated.pk
+    assert Company.objects.count() == 2
+    assert Contact.objects.count() == 3
+    assert Activity.objects.count() == 3
+    assert FollowUp.objects.count() == 5
+    assert Contact.objects.get(legacy_code="CO-001-P01").legacy_row_id == "AN-001"
+    assert FollowUp.objects.get(summary="Send updated height proposal").legacy_entry_id == "AC-003"
+    assert FollowUp.objects.get(summary="Send updated height proposal").status == "completed"
+    assert FollowUp.objects.get(summary="Confirmed requested height and plot").source_activity.legacy_code == "AC-001"
+    assert FollowUp.objects.get(summary="Company-level conversation follow-up").source_activity.legacy_code == "AC-006"
+
+
+@pytest.mark.django_db(transaction=True)
 def test_import_rolls_back_entire_batch_when_a_reference_is_broken(tmp_path):
     """Moving writes outside the transaction would leave partial data after a bad row."""
     archive = tmp_path / "archive"
